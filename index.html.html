@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Company HQ Dashboard</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #030712; }
+button { font-family: system-ui, sans-serif; }
+table { border-spacing: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+
+const sampleOOs = [
+  { id: 1, name: "Ahmed K.", truck: "2019 Freightliner", type: "OO", status: "active", mvr: "Clean", loads: 6, weekGross: 4800 },
+  { id: 2, name: "Omar S.", truck: "2020 Peterbilt", type: "OO", status: "active", mvr: "Clean", loads: 5, weekGross: 4200 },
+  { id: 3, name: "Yusuf M.", truck: "2018 Kenworth", type: "Leased", status: "active", mvr: "1 minor", csa: 22, loads: 4, weekGross: 3600 },
+  { id: 4, name: "Ibrahim R.", truck: "2021 Volvo", type: "OO", status: "on-load", mvr: "Clean", loads: 7, weekGross: 5100 },
+  { id: 5, name: "Khalid A.", truck: "2017 International", type: "Leased", status: "active", mvr: "2 violations", csa: 31, loads: 5, weekGross: 5000 },
+];
+
+var ooLoads = [
+  { id: 1001, shipper: "Amazon Relay", origin: "Houston, TX", dest: "Dallas, TX", rate: 1800, driver: "Ahmed K.", status: "delivered", source: "oo" },
+  { id: 1002, shipper: "DAT Load Board", origin: "Dallas, TX", dest: "Atlanta, GA", rate: 3500, driver: "Ahmed K.", status: "delivered", source: "oo" },
+  { id: 1003, shipper: "Arrive Logistics", origin: "Chicago, IL", dest: "Nashville, TN", rate: 2800, driver: "Yusuf M.", status: "in-transit", source: "oo" },
+  { id: 1004, shipper: "Amazon Relay", origin: "Atlanta, GA", dest: "Miami, FL", rate: 2200, driver: "Omar S.", status: "in-transit", source: "oo" },
+  { id: 1005, shipper: "Coyote Logistics", origin: "Newark, NJ", dest: "Charlotte, NC", rate: 3100, driver: "Ibrahim R.", status: "picked-up", source: "oo" },
+];
+
+var brokerLoads = [
+  { id: 2001, shipper: "ABC Manufacturing", origin: "Dallas, TX", dest: "Memphis, TN", rate: 2400, carrierPay: 1900, carrier: "JT Trucking LLC", status: "delivered", source: "broker" },
+  { id: 2002, shipper: "Metro Supplies", origin: "Atlanta, GA", dest: "Jacksonville, FL", rate: 1800, carrierPay: 1350, carrier: "FastHaul Inc.", status: "delivered", source: "broker" },
+  { id: 2003, shipper: "Global Parts Co.", origin: "Houston, TX", dest: "San Antonio, TX", rate: 1200, carrierPay: 900, carrier: "Lone Star Freight", status: "in-transit", source: "broker" },
+  { id: 2004, shipper: "Smith Foods Inc.", origin: "Chicago, IL", dest: "Detroit, MI", rate: 1600, carrierPay: 1200, carrier: "Pending", status: "pending", source: "broker" },
+];
+
+var allLoads = ooLoads.concat(brokerLoads);
+
+var makePartners = function() { return [
+  { role: "Dispatch", color: "#2980B9", emoji: "📦", tasks: [
+    { id: "d1", text: "Find 5 loads on DAT", done: true },{ id: "d2", text: "Send rate confirmations", done: true },
+    { id: "d3", text: "Check calls on active loads", done: false },{ id: "d4", text: "Collect PODs from deliveries", done: false },
+  ]},
+  { role: "Recruiting", color: "#27AE60", emoji: "🤝", tasks: [
+    { id: "r1", text: "Post on 3 Facebook OO groups", done: true },{ id: "r2", text: "Review 4 OO applications", done: true },
+    { id: "r3", text: "Interview 2 candidates", done: false },{ id: "r4", text: "Send contractor agreement", done: false },
+  ]},
+  { role: "Sales", color: "#E67E22", emoji: "📞", tasks: [
+    { id: "s1", text: "Cold call 20 shippers", done: true },{ id: "s2", text: "Follow up with 5 leads", done: false },
+    { id: "s3", text: "Broker 2 overflow loads", done: true },{ id: "s4", text: "Email 10 logistics managers", done: false },
+  ]},
+  { role: "Compliance", color: "#8E44AD", emoji: "🛡️", tasks: [
+    { id: "c1", text: "Check OO insurance expiry dates", done: true },{ id: "c2", text: "Review drug test results", done: true },
+    { id: "c3", text: "Pull MVR reports for all drivers", done: false },{ id: "c4", text: "Check CSA impact from leased drivers", done: false },
+  ]},
+  { role: "Finance", color: "#C0392B", emoji: "💰", tasks: [
+    { id: "f1", text: "Run weekly settlements", done: true },{ id: "f2", text: "Send 3 invoices to shippers", done: true },
+    { id: "f3", text: "Reconcile factoring payments", done: false },{ id: "f4", text: "Update P&L in QuickBooks", done: false },
+  ]},
+]; };
+
+function Badge(props) {
+  return <span style={{ backgroundColor: props.color + "22", color: props.color, padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>{props.label}</span>;
+}
+
+var statusColors = { delivered: "#2ECC71", "in-transit": "#3498DB", "picked-up": "#F1C40F", pending: "#95A5A6" };
+
+function App() {
+  var _ps = useState("overview"); var activeTab = _ps[0]; var setActiveTab = _ps[1];
+  var _pp = useState(makePartners); var partners = _pp[0]; var setPartners = _pp[1];
+  var _sp = useState(0); var selectedPartner = _sp[0]; var setSelectedPartner = _sp[1];
+  var _nt = useState(""); var newTaskText = _nt[0]; var setNewTaskText = _nt[1];
+  var _ia = useState(false); var isAdding = _ia[0]; var setIsAdding = _ia[1];
+
+  function toggleTask(pIdx, taskId) {
+    setPartners(function(prev) {
+      return prev.map(function(p, i) {
+        if (i !== pIdx) return p;
+        return { ...p, tasks: p.tasks.map(function(t) { return t.id === taskId ? { ...t, done: !t.done } : t; }) };
+      });
+    });
+  }
+  function addNewTask() {
+    if (newTaskText.trim() === "") return;
+    var id = "t_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
+    setPartners(function(prev) {
+      return prev.map(function(p, i) {
+        if (i !== selectedPartner) return p;
+        return { ...p, tasks: p.tasks.concat([{ id: id, text: newTaskText.trim(), done: false }]) };
+      });
+    });
+    setNewTaskText(""); setIsAdding(false);
+  }
+  function deleteTask(pIdx, taskId) {
+    setPartners(function(prev) {
+      return prev.map(function(p, i) {
+        if (i !== pIdx) return p;
+        return { ...p, tasks: p.tasks.filter(function(t) { return t.id !== taskId; }) };
+      });
+    });
+  }
+
+  // Money calculations
+  var ooDelivered = ooLoads.filter(function(l) { return l.status === "delivered"; });
+  var ooGross = ooDelivered.reduce(function(s, l) { return s + l.rate; }, 0);
+  var ooOurCut = sampleOOs.reduce(function(s, o) { return s + Math.round(o.weekGross * 0.12); }, 0);
+
+  var brokerDelivered = brokerLoads.filter(function(l) { return l.status === "delivered"; });
+  var brokerGross = brokerDelivered.reduce(function(s, l) { return s + l.rate; }, 0);
+  var brokerProfit = brokerDelivered.reduce(function(s, l) { return s + l.rate - l.carrierPay; }, 0);
+
+  var totalRevenue = ooGross + brokerGross;
+  var totalProfit = ooOurCut + brokerProfit;
+
+  var cp = partners[selectedPartner];
+  var cpDone = cp.tasks.filter(function(t) { return t.done; }).length;
+
+  var tabs = [
+    { id: "overview", label: "📊 Overview" },{ id: "loads", label: "📦 Loads" },
+    { id: "drivers", label: "🚛 Drivers" },{ id: "money", label: "💰 Money" },{ id: "tasks", label: "✅ Tasks" },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", backgroundColor: "#030712", color: "white", fontFamily: "system-ui, sans-serif" }}>
+      {/* Header */}
+      <div style={{ backgroundColor: "#111827", borderBottom: "1px solid #1f2937", padding: "8px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontWeight: 900, fontSize: 14 }}>🏢 COMPANY HQ</span>
+          <div style={{ display: "flex", gap: 4 }}>
+            {tabs.map(function(t) {
+              return <button key={t.id} onClick={function() { setActiveTab(t.id); }} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer", backgroundColor: activeTab === t.id ? "#1B4F72" : "transparent", color: activeTab === t.id ? "#fff" : "#6B7280" }}>{t.label}</button>;
+            })}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ textAlign: "right" }}>
+            <p style={{ fontSize: 11, color: "#6B7280" }}>Total Profit This Week</p>
+            <p style={{ fontSize: 16, fontWeight: 900, color: "#2ECC71" }}>${totalProfit.toLocaleString()}</p>
+          </div>
+          <div style={{ backgroundColor: "#064e3b", border: "1px solid #065f46", borderRadius: 8, padding: "4px 10px" }}>
+            <span style={{ color: "#34d399", fontSize: 14, fontWeight: 900 }}>Day 12</span>
+            <span style={{ color: "#065f46", fontSize: 11 }}> /90</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
+
+        {/* ─── OVERVIEW ─── */}
+        {activeTab === "overview" && <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
+            {[
+              ["🚛", "Active Drivers", sampleOOs.filter(function(o){return o.status!=="off"}).length, "#2ECC71", "drivers"],
+              ["📦", "Loads Moving", allLoads.filter(function(l){return l.status==="in-transit"||l.status==="picked-up"}).length, "#3498DB", "loads"],
+              ["💵", "From OOs (12%)", "$"+ooOurCut.toLocaleString(), "#2ECC71", "money"],
+              ["🔄", "From Brokerage", "$"+brokerProfit.toLocaleString(), "#E67E22", "money"],
+              ["📈", "Total Profit", "$"+totalProfit.toLocaleString(), "#2ECC71", "money"],
+            ].map(function(item, i) {
+              return <div key={i} onClick={function(){ setActiveTab(item[4]); }} style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12, cursor: "pointer", transition: "all 0.2s" }} onMouseEnter={function(e){ e.currentTarget.style.borderColor = item[3]; e.currentTarget.style.transform = "translateY(-2px)"; }} onMouseLeave={function(e){ e.currentTarget.style.borderColor = "#1f2937"; e.currentTarget.style.transform = "translateY(0)"; }}>
+                <p style={{ color: "#6B7280", fontSize: 11 }}>{item[0]} {item[1]}</p>
+                <p style={{ color: item[3], fontSize: 20, fontWeight: 900, marginTop: 4 }}>{item[2]}</p>
+                <p style={{ color: "#374151", fontSize: 10, marginTop: 4 }}>Click to view →</p>
+              </div>;
+            })}
+          </div>
+
+          {/* Revenue Breakdown */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 16 }}>
+              <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>💵 Where the Money Comes From</p>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <div style={{ flex: 1, backgroundColor: "#064e3b", borderRadius: 8, padding: 12, textAlign: "center" }}>
+                  <p style={{ color: "#6B7280", fontSize: 11 }}>🚛 OO Dispatch Fees</p>
+                  <p style={{ color: "#2ECC71", fontSize: 24, fontWeight: 900, marginTop: 4 }}>${ooOurCut.toLocaleString()}</p>
+                  <p style={{ color: "#065f46", fontSize: 11, marginTop: 4 }}>{sampleOOs.filter(function(o){return o.weekGross>0}).length} drivers × 12%</p>
+                </div>
+                <div style={{ flex: 1, backgroundColor: "#431407", borderRadius: 8, padding: 12, textAlign: "center" }}>
+                  <p style={{ color: "#6B7280", fontSize: 11 }}>🔄 Brokerage Margins</p>
+                  <p style={{ color: "#E67E22", fontSize: 24, fontWeight: 900, marginTop: 4 }}>${brokerProfit.toLocaleString()}</p>
+                  <p style={{ color: "#7c2d12", fontSize: 11, marginTop: 4 }}>{brokerDelivered.length} loads brokered</p>
+                </div>
+              </div>
+              <div style={{ backgroundColor: "#1f2937", borderRadius: 8, padding: 12, textAlign: "center" }}>
+                <p style={{ color: "#6B7280", fontSize: 11 }}>📈 TOTAL WEEKLY PROFIT</p>
+                <p style={{ color: "#2ECC71", fontSize: 28, fontWeight: 900, marginTop: 4 }}>${totalProfit.toLocaleString()}</p>
+                <p style={{ color: "#4B5563", fontSize: 11, marginTop: 4 }}>≈ ${(totalProfit * 4.3).toLocaleString()}/month</p>
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 16 }}>
+              <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>👥 Team Today</p>
+              {partners.map(function(p, i) {
+                var d = p.tasks.filter(function(t){return t.done}).length;
+                var pct = p.tasks.length > 0 ? (d / p.tasks.length) * 100 : 0;
+                return <div key={i} onClick={function(){ setActiveTab("tasks"); setSelectedPartner(i); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: 6, borderRadius: 8, cursor: "pointer", marginBottom: 2 }}>
+                  <span style={{ fontSize: 14 }}>{p.emoji}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: p.color, flex: 1 }}>{p.role}</span>
+                  <div style={{ width: 48, height: 6, backgroundColor: "#1f2937", borderRadius: 3 }}>
+                    <div style={{ width: pct + "%", height: 6, backgroundColor: p.color, borderRadius: 3 }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: "#4B5563" }}>{d}/{p.tasks.length}</span>
+                </div>;
+              })}
+              <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid #1f2937" }}>
+                <p style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>🎯 90-Day Goal</p>
+                <div style={{ display: "flex", gap: 1 }}>
+                  {Array.from({length:90}, function(_,i) { return <div key={i} style={{ flex: 1, height: i < 12 ? 12 : 4, backgroundColor: i < 12 ? "#2ECC71" : "#1f2937", borderRadius: 1, opacity: i < 12 ? 0.5 + (i/90) : 0.3 }} />; })}
+                </div>
+                <p style={{ color: "#059669", fontSize: 11, fontWeight: 700, marginTop: 4 }}>10 OOs + brokerage + all remote</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Scaling Projections */}
+          <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 16, marginTop: 12 }}>
+            <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>🚀 What Happens When We Scale (OOs Only — 12%)</p>
+            <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 12 }}>Each OO averages $4,500/week gross. Our 12% cut per driver = $540/week = $2,340/month.</p>
+            <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+              <thead><tr style={{ borderBottom: "2px solid #1f2937" }}>
+                <th style={{ textAlign: "left", padding: "8px 12px", color: "#6B7280", fontSize: 12 }}>Drivers</th>
+                <th style={{ textAlign: "center", padding: "8px 12px", color: "#6B7280", fontSize: 12 }}>Our Weekly Cut</th>
+                <th style={{ textAlign: "center", padding: "8px 12px", color: "#6B7280", fontSize: 12 }}>Our Monthly Cut</th>
+                <th style={{ textAlign: "center", padding: "8px 12px", color: "#6B7280", fontSize: 12 }}>Per Partner/Month</th>
+              </tr></thead>
+              <tbody>
+                {[5, 10, 15, 20].map(function(n) {
+                  var weekly = n * 540;
+                  var monthly = Math.round(weekly * 4.3);
+                  var perPartner = Math.round(monthly / 5);
+                  var isHighlight = n === 20;
+                  return <tr key={n} style={{ borderBottom: "1px solid #1f2937", backgroundColor: isHighlight ? "rgba(46,204,113,0.08)" : "transparent" }}>
+                    <td style={{ padding: "10px 12px" }}>
+                      <span style={{ fontWeight: 900, fontSize: 18 }}>{n}</span>
+                      <span style={{ color: "#6B7280", fontSize: 12, marginLeft: 6 }}>OOs</span>
+                    </td>
+                    <td style={{ textAlign: "center", padding: "10px 12px", color: "#2ECC71", fontWeight: 700 }}>${weekly.toLocaleString()}</td>
+                    <td style={{ textAlign: "center", padding: "10px 12px", color: "#2ECC71", fontWeight: 900, fontSize: 16 }}>${monthly.toLocaleString()}</td>
+                    <td style={{ textAlign: "center", padding: "10px 12px", color: isHighlight ? "#2ECC71" : "#9CA3AF", fontWeight: 700 }}>${perPartner.toLocaleString()}</td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+            <div style={{ marginTop: 12, padding: 12, backgroundColor: "#064e3b", borderRadius: 8, textAlign: "center" }}>
+              <p style={{ color: "#6B7280", fontSize: 12 }}>And this is BEFORE brokerage. Add 3 brokered loads/day on top:</p>
+              <p style={{ color: "#E67E22", fontSize: 20, fontWeight: 900, marginTop: 4 }}>+ $33,000–$46,000/month from brokerage</p>
+              <p style={{ color: "#2ECC71", fontSize: 14, fontWeight: 700, marginTop: 8 }}>20 OOs + brokerage = $79,000–$92,000/month total</p>
+              <p style={{ color: "#4B5563", fontSize: 12, marginTop: 4 }}>= $15,800–$18,400 per partner per month</p>
+            </div>
+          </div>
+        </div>}
+        {activeTab === "loads" && <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {/* OO Loads */}
+            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12 }}>
+              <p style={{ fontWeight: 700, marginBottom: 8 }}>🚛 OO Loads (Our Drivers)</p>
+              {ooLoads.map(function(l) {
+                return <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, borderRadius: 8, backgroundColor: "rgba(31,41,55,0.4)", marginBottom: 4 }}>
+                  <Badge label={l.status} color={statusColors[l.status]} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 12, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.origin} → {l.dest}</p>
+                    <p style={{ fontSize: 11, color: "#6B7280" }}>{l.shipper} • {l.driver}</p>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <p style={{ fontSize: 13, fontWeight: 700 }}>${l.rate.toLocaleString()}</p>
+                    <p style={{ fontSize: 11, color: "#2ECC71" }}>Our 12%: ${Math.round(l.rate * 0.12).toLocaleString()}</p>
+                  </div>
+                </div>;
+              })}
+            </div>
+
+            {/* Brokered Loads */}
+            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12 }}>
+              <p style={{ fontWeight: 700, marginBottom: 8 }}>🔄 Brokered Loads (Not Our Drivers)</p>
+              {brokerLoads.map(function(l) {
+                return <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, borderRadius: 8, backgroundColor: "rgba(31,41,55,0.4)", marginBottom: 4 }}>
+                  <Badge label={l.status} color={statusColors[l.status]} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 12, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.origin} → {l.dest}</p>
+                    <p style={{ fontSize: 11, color: "#6B7280" }}>{l.shipper} • {l.carrier}</p>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <p style={{ fontSize: 13, fontWeight: 700 }}>${l.rate.toLocaleString()}</p>
+                    <p style={{ fontSize: 11, color: "#E67E22" }}>Profit: ${(l.rate - l.carrierPay).toLocaleString()}</p>
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>
+        </div>}
+
+        {/* ─── DRIVERS ─── */}
+        {activeTab === "drivers" && <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12 }}>
+          <p style={{ fontWeight: 700, marginBottom: 12 }}>🚛 Our Drivers</p>
+          {sampleOOs.map(function(o) {
+            var mvrColor = o.mvr === "Clean" ? "#2ECC71" : o.mvr === "1 minor" ? "#F1C40F" : "#E74C3C";
+            return <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: 12, borderRadius: 12, backgroundColor: "rgba(31,41,55,0.3)", marginBottom: 8 }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", backgroundColor: "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🧑</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{o.name}</span>
+                  <Badge label={o.type} color={o.type === "OO" ? "#2ECC71" : "#3498DB"} />
+                  <Badge label={o.status} color={o.status === "active" ? "#2ECC71" : o.status === "on-load" ? "#3498DB" : "#95A5A6"} />
+                </div>
+                <p style={{ color: "#6B7280", fontSize: 12 }}>{o.truck}</p>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <p style={{ color: "#6B7280", fontSize: 10 }}>MVR</p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: mvrColor }}>{o.mvr}</p>
+              </div>
+              {o.type === "Leased" && <div style={{ textAlign: "center" }}>
+                <p style={{ color: "#6B7280", fontSize: 10 }}>CSA Impact</p>
+                <p style={{ fontSize: 14, fontWeight: 900, color: o.csa <= 15 ? "#2ECC71" : o.csa <= 30 ? "#F1C40F" : "#E74C3C" }}>{o.csa}</p>
+              </div>}
+              <div style={{ textAlign: "center" }}>
+                <p style={{ color: "#6B7280", fontSize: 10 }}>Loads/wk</p>
+                <p style={{ fontSize: 16, fontWeight: 900 }}>{o.loads}</p>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <p style={{ color: "#6B7280", fontSize: 10 }}>Gross/wk</p>
+                <p style={{ fontSize: 16, fontWeight: 900, color: "#2ECC71" }}>${o.weekGross.toLocaleString()}</p>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <p style={{ color: "#6B7280", fontSize: 10 }}>Our 12%</p>
+                <p style={{ fontSize: 16, fontWeight: 900, color: "#2ECC71" }}>${Math.round(o.weekGross * 0.12).toLocaleString()}</p>
+              </div>
+            </div>;
+          })}
+          <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid #1f2937", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div><span style={{ color: "#6B7280", fontSize: 13 }}>{sampleOOs.filter(function(o){return o.type==="OO"}).length} OOs • {sampleOOs.filter(function(o){return o.type==="Leased"}).length} Leased</span></div>
+            <span style={{ color: "#2ECC71", fontWeight: 700 }}>Weekly cut from drivers: ${ooOurCut.toLocaleString()}</span>
+          </div>
+        </div>}
+
+        {/* ─── MONEY ─── */}
+        {activeTab === "money" && <div>
+          {/* Where Money Comes From */}
+          <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>💰 Where Our Money Comes From</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <div style={{ backgroundColor: "#064e3b", borderRadius: 12, border: "1px solid #065f46", padding: 16, textAlign: "center" }}>
+              <p style={{ fontSize: 32 }}>🚛</p>
+              <p style={{ color: "#6B7280", fontSize: 12, marginTop: 8 }}>From OO Dispatch Fees (12%)</p>
+              <p style={{ color: "#2ECC71", fontSize: 28, fontWeight: 900, marginTop: 8 }}>${ooOurCut.toLocaleString()}</p>
+              <p style={{ color: "#065f46", fontSize: 12, marginTop: 4 }}>{sampleOOs.filter(function(o){return o.weekGross>0}).length} drivers paying us 12%</p>
+              <p style={{ color: "#065f46", fontSize: 11, marginTop: 2 }}>≈ ${(ooOurCut * 4.3).toLocaleString()}/month</p>
+            </div>
+            <div style={{ backgroundColor: "#431407", borderRadius: 12, border: "1px solid #7c2d12", padding: 16, textAlign: "center" }}>
+              <p style={{ fontSize: 32 }}>🔄</p>
+              <p style={{ color: "#6B7280", fontSize: 12, marginTop: 8 }}>From Brokerage Margins</p>
+              <p style={{ color: "#E67E22", fontSize: 28, fontWeight: 900, marginTop: 8 }}>${brokerProfit.toLocaleString()}</p>
+              <p style={{ color: "#7c2d12", fontSize: 12, marginTop: 4 }}>{brokerDelivered.length} loads brokered this week</p>
+              <p style={{ color: "#7c2d12", fontSize: 11, marginTop: 2 }}>≈ ${(brokerProfit * 4.3).toLocaleString()}/month</p>
+            </div>
+            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "2px solid #2ECC71", padding: 16, textAlign: "center" }}>
+              <p style={{ fontSize: 32 }}>📈</p>
+              <p style={{ color: "#6B7280", fontSize: 12, marginTop: 8 }}>TOTAL WEEKLY PROFIT</p>
+              <p style={{ color: "#2ECC71", fontSize: 28, fontWeight: 900, marginTop: 8 }}>${totalProfit.toLocaleString()}</p>
+              <p style={{ color: "#4B5563", fontSize: 12, marginTop: 4 }}>OO fees + brokerage combined</p>
+              <p style={{ color: "#2ECC71", fontSize: 13, fontWeight: 700, marginTop: 2 }}>≈ ${(totalProfit * 4.3).toLocaleString()}/month</p>
+            </div>
+          </div>
+
+          {/* OO Settlements */}
+          <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12, marginBottom: 12 }}>
+            <p style={{ fontWeight: 700, marginBottom: 8 }}>🚛 OO Settlements (What We Keep vs What They Keep)</p>
+            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+              <thead><tr style={{ color: "#6B7280", fontSize: 11, borderBottom: "1px solid #1f2937" }}>
+                <th style={{ textAlign: "left", padding: 8 }}>Driver</th><th style={{ textAlign: "left" }}>Type</th><th style={{ textAlign: "right" }}>Gross</th><th style={{ textAlign: "right" }}>Our 12%</th><th style={{ textAlign: "right" }}>They Keep (88%)</th>
+              </tr></thead>
+              <tbody>
+                {sampleOOs.filter(function(o){return o.weekGross > 0}).map(function(o) {
+                  return <tr key={o.id} style={{ borderBottom: "1px solid #1f2937" }}>
+                    <td style={{ padding: 8, fontWeight: 700 }}>{o.name}</td>
+                    <td><Badge label={o.type} color={o.type === "OO" ? "#2ECC71" : "#3498DB"} /></td>
+                    <td style={{ textAlign: "right" }}>${o.weekGross.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", color: "#2ECC71", fontWeight: 700 }}>${Math.round(o.weekGross * 0.12).toLocaleString()}</td>
+                    <td style={{ textAlign: "right", color: "#9CA3AF" }}>${Math.round(o.weekGross * 0.88).toLocaleString()}</td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Brokerage Breakdown */}
+          <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12 }}>
+            <p style={{ fontWeight: 700, marginBottom: 8 }}>🔄 Brokerage Breakdown (What Shipper Pays vs What Carrier Gets)</p>
+            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+              <thead><tr style={{ color: "#6B7280", fontSize: 11, borderBottom: "1px solid #1f2937" }}>
+                <th style={{ textAlign: "left", padding: 8 }}>Shipper</th><th style={{ textAlign: "left" }}>Route</th><th style={{ textAlign: "right" }}>Shipper Pays</th><th style={{ textAlign: "right" }}>Carrier Gets</th><th style={{ textAlign: "right" }}>We Keep</th>
+              </tr></thead>
+              <tbody>
+                {brokerLoads.filter(function(l){return l.status === "delivered"}).map(function(l) {
+                  return <tr key={l.id} style={{ borderBottom: "1px solid #1f2937" }}>
+                    <td style={{ padding: 8, fontWeight: 700 }}>{l.shipper}</td>
+                    <td style={{ color: "#9CA3AF", fontSize: 12 }}>{l.origin} → {l.dest}</td>
+                    <td style={{ textAlign: "right" }}>${l.rate.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", color: "#9CA3AF" }}>${l.carrierPay.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", color: "#E67E22", fontWeight: 700 }}>${(l.rate - l.carrierPay).toLocaleString()}</td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>}
+
+        {/* ─── TASKS ─── */}
+        {activeTab === "tasks" && <div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            {partners.map(function(p, i) {
+              var d = p.tasks.filter(function(t){return t.done}).length;
+              var pct = p.tasks.length > 0 ? (d / p.tasks.length) * 100 : 0;
+              var isSel = i === selectedPartner;
+              return <button key={i} onClick={function(){ setSelectedPartner(i); }} style={{ flex: 1, borderRadius: 12, padding: 10, border: isSel ? "2px solid "+p.color : "1px solid #1f2937", backgroundColor: isSel ? p.color+"18" : "#111827", cursor: "pointer", textAlign: "left" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 14 }}>{p.emoji}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: isSel ? p.color : "#6B7280" }}>{p.role}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                  <div style={{ flex: 1, height: 6, backgroundColor: "#1f2937", borderRadius: 3 }}>
+                    <div style={{ width: pct+"%", height: 6, backgroundColor: p.color, borderRadius: 3, transition: "width 0.3s" }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: "#4B5563" }}>{d}/{p.tasks.length}</span>
+                </div>
+              </button>;
+            })}
+          </div>
+
+          <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 24 }}>{cp.emoji}</span>
+                <div>
+                  <p style={{ fontWeight: 900, color: cp.color }}>{cp.role}</p>
+                  <p style={{ fontSize: 12, color: "#6B7280" }}>Partner {selectedPartner + 1} — Click tasks to complete</p>
+                </div>
+              </div>
+              <span style={{ fontSize: 28, fontWeight: 900, color: cp.color }}>{cpDone}/{cp.tasks.length}</span>
+            </div>
+
+            {cp.tasks.map(function(task) {
+              return <div key={task.id} onClick={function() { toggleTask(selectedPartner, task.id); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, borderRadius: 8, cursor: "pointer", marginBottom: 4 }} onMouseEnter={function(e){e.currentTarget.style.backgroundColor="#1f2937"}} onMouseLeave={function(e){e.currentTarget.style.backgroundColor="transparent"}}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, border: "2px solid "+(task.done ? cp.color : "#374151"), backgroundColor: task.done ? cp.color : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {task.done && <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>✓</span>}
+                </div>
+                <span style={{ flex: 1, fontSize: 14, color: task.done ? "#4B5563" : "#e5e7eb", textDecoration: task.done ? "line-through" : "none" }}>{task.text}</span>
+                <button onClick={function(e) { e.stopPropagation(); deleteTask(selectedPartner, task.id); }} style={{ opacity: 0.3, border: "none", background: "none", color: "#6B7280", fontSize: 14, cursor: "pointer", padding: 4 }} onMouseEnter={function(e){e.target.style.opacity=1;e.target.style.color="#EF4444"}} onMouseLeave={function(e){e.target.style.opacity=0.3;e.target.style.color="#6B7280"}}>✕</button>
+              </div>;
+            })}
+
+            {isAdding ? (
+              <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                <input value={newTaskText} onChange={function(e){setNewTaskText(e.target.value)}} onKeyDown={function(e){if(e.key==="Enter")addNewTask()}} placeholder="Type task, press Enter..." autoFocus style={{ flex: 1, backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8, padding: "8px 12px", fontSize: 14, color: "#fff", outline: "none" }} />
+                <button onClick={addNewTask} style={{ backgroundColor: "#374151", border: "none", color: "#fff", fontSize: 13, padding: "8px 16px", borderRadius: 8, cursor: "pointer" }}>Add</button>
+                <button onClick={function(){setIsAdding(false);setNewTaskText("")}} style={{ background: "none", border: "none", color: "#6B7280", fontSize: 14, cursor: "pointer", padding: "0 8px" }}>✕</button>
+              </div>
+            ) : (
+              <button onClick={function(){setIsAdding(true)}} style={{ marginTop: 8, width: "100%", padding: 10, border: "1px dashed #1f2937", borderRadius: 8, backgroundColor: "transparent", color: "#4B5563", fontSize: 13, cursor: "pointer" }} onMouseEnter={function(e){e.target.style.borderColor="#4B5563";e.target.style.color="#9CA3AF"}} onMouseLeave={function(e){e.target.style.borderColor="#1f2937";e.target.style.color="#4B5563"}}>+ Add Task</button>
+            )}
+          </div>
+        </div>}
+
+      </div>
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
+</body>
+</html>
