@@ -559,7 +559,7 @@ function Dashboard({ session }) {
         {tab==="operations" && <OperationsTab        loads={loads} setLoads={setLoads} drivers={drivers} />}
         {tab==="people"     && <PeopleTab            drivers={drivers} setDrivers={setDrivers} contacts={contacts} setContacts={setContacts} />}
         {tab==="finance"    && <FinanceComplianceTab loads={loads} setLoads={setLoads} drivers={drivers} ooFees={ooFees} brokerProfit={brokerProfit} totalProfit={totalProfit} brokerLoads={brokerLoads} setBrokerLoads={setBrokerLoads} alerts={alerts} />}
-        {tab==="tasks"      && <TasksTab             tasks={tasks} setTasks={setTasks} />}
+        {tab==="tasks"      && <TasksTab             tasks={tasks} setTasks={setTasks} priorityTasks={priorityTasks} setPriorityTasks={setPriorityTasks} />}
       </div>
     </div>
   );
@@ -588,7 +588,15 @@ function OverviewTab({ drivers, loads, tasks, ooFees, brokerProfit, totalProfit,
   ];
 
   if (drivers.length === 0) return (
-    <div style={{ maxWidth:560, margin:"60px auto", textAlign:"center" }}>
+    <div>
+      <TaskPriorityPanel
+        priorityTasks={priorityTasks}
+        setPriorityTasks={setPriorityTasks}
+        tasks={tasks}
+        tiersOnly={["urgent","asap"]}
+        prominent
+      />
+      <div style={{ maxWidth:560, margin:"40px auto", textAlign:"center" }}>
       <p style={{ fontSize:48, marginBottom:16 }}>🚛</p>
       <p style={{ fontWeight:900, fontSize:22, marginBottom:8 }}>Welcome to Elite Trucking Dashboard</p>
       <p style={{ color:"var(--muted)", fontSize:14, marginBottom:32, lineHeight:1.6 }}>No data yet. Start by adding your first driver — once you have drivers and loads entered, this dashboard will show your live numbers.</p>
@@ -608,6 +616,7 @@ function OverviewTab({ drivers, loads, tasks, ooFees, brokerProfit, totalProfit,
         ))}
       </div>
       <button onClick={() => setTab("people")} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"12px 28px", borderRadius:10, fontWeight:700, fontSize:15 }}>+ Add Your First Driver →</button>
+    </div>
     </div>
   );
 
@@ -1920,7 +1929,7 @@ function FinanceComplianceTab({ loads, setLoads, drivers, ooFees, brokerProfit, 
 // ════════════════════════════════════════
 //  TASK PRIORITY PANEL (Overview)
 // ════════════════════════════════════════
-function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }) {
+function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly, prominent }) {
   const [collapsed, setCollapsed] = useState({ urgent:false, asap:false, normal:false });
   const [showAdd, setShowAdd] = useState(null);
   const [form, setForm] = useState({ text:"", dept:"", person:"", deadline:"", notes:"" });
@@ -2212,7 +2221,7 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
   );
 }
 
-function TasksTab({ tasks, setTasks }) {
+function TasksTab({ tasks, setTasks, priorityTasks, setPriorityTasks }) {
   const [sel, setSel] = useState(0);
   const [newText, setNewText] = useState("");
   const [adding, setAdding] = useState(false);
@@ -2242,6 +2251,13 @@ function TasksTab({ tasks, setTasks }) {
 
   return (
     <div>
+      {/* ── Priority tasks panel at top of Tasks tab ── */}
+      <TaskPriorityPanel
+        priorityTasks={priorityTasks}
+        setPriorityTasks={setPriorityTasks}
+        tasks={tasks}
+      />
+
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
         <p style={{ fontWeight:900, fontSize:16 }}>✅ Team Task Board</p>
         <button onClick={()=>setAddingRole(true)} style={{ fontSize:12, padding:"6px 12px", background:"var(--bg-subtle)", border:"1px solid var(--border-hi)", color:"#9CA3AF", borderRadius:8 }}>+ Add Role</button>
