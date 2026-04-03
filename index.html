@@ -42,6 +42,25 @@ table { border-spacing: 0; border-collapse: collapse; }
 ::-webkit-scrollbar-track { background: var(--bg-subtle); }
 ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
 
+/* ── Animations ── */
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%       { transform: scale(0.7); opacity: 0.4; }
+}
+@keyframes urgent-border {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(239,68,68,0.5); }
+  50%       { box-shadow: 0 0 20px 4px rgba(239,68,68,0.2); }
+}
+.pulse-dot {
+  display: inline-block;
+  width: 9px; height: 9px;
+  background: #EF4444;
+  border-radius: 50%;
+  animation: pulse-dot 1.1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.urgent-glow { animation: urgent-border 2s ease-in-out infinite; }
+
 /* ── Responsive layout classes ── */
 .grid-kpi   { display: grid; gap: 8px; }
 .grid-2col  { display: grid; gap: 16px; }
@@ -347,10 +366,12 @@ function Dashboard({ session }) {
   });
   const redAlerts = alerts.filter(a => a.sev==="red");
 
+  const urgentCount = priorityTasks.filter(t => t.priority==="urgent" && !t.done).length;
+
   const TABS = [
     { id:"overview",    label:"🏠 Overview" },
     { id:"operations",  label:"📡 Operations" },
-    { id:"people",      label:"👥 People" },
+    { id:"people",      label:"👥 Drivers" },
     { id:"finance",     label:"💰 Finance" },
     { id:"tasks",       label:"✅ Tasks" },
   ];
@@ -375,9 +396,25 @@ function Dashboard({ session }) {
             </div>
           </div>
           <div style={{ display:"flex", gap:2, flex:1, overflowX:"auto" }}>
-            {TABS.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ padding:"6px 11px", borderRadius:8, fontSize:12, fontWeight:700, border:"none", whiteSpace:"nowrap", background: tab===t.id?"#1d4ed8":"transparent", color: tab===t.id?"#fff":"var(--muted)" }}>{t.label}</button>
-            ))}
+            {TABS.map(t => {
+              const isActive = tab === t.id;
+              const showBadge = t.id === "tasks" && urgentCount > 0;
+              return (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  style={{ position:"relative", padding:"6px 11px", borderRadius:8, fontSize:12, fontWeight:700, border:"none", whiteSpace:"nowrap",
+                    background: isActive ? "#1d4ed8" : "transparent",
+                    color: isActive ? "#fff" : "var(--muted)" }}>
+                  {t.label}
+                  {showBadge && (
+                    <span style={{ position:"absolute", top:-5, right:-5, display:"flex", alignItems:"center", gap:3,
+                      background:"#EF4444", borderRadius:10, padding:"1px 5px", fontSize:10, fontWeight:900, color:"#fff" }}>
+                      <span className="pulse-dot" style={{ width:5, height:5 }} />
+                      {urgentCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
             {redAlerts.length > 0 && (
@@ -476,6 +513,15 @@ function OverviewTab({ drivers, loads, tasks, ooFees, brokerProfit, totalProfit,
 
   return (
     <div>
+      {/* ══ PRIORITY TASK BANNER — first thing visible ══ */}
+      <TaskPriorityPanel
+        priorityTasks={priorityTasks}
+        setPriorityTasks={setPriorityTasks}
+        tasks={tasks}
+        tiersOnly={["urgent","asap"]}
+        prominent
+      />
+
       <div className="grid-kpi-top" style={{ marginBottom:8 }}>
         {kpis.slice(0,4).map((k,i) => (
           <div key={i} onClick={() => setTab(k.tab)} style={{ background:"var(--bg-card)", borderRadius:12, border:"1px solid var(--border)", padding:12, cursor:"pointer" }}
@@ -499,50 +545,42 @@ function OverviewTab({ drivers, loads, tasks, ooFees, brokerProfit, totalProfit,
         ))}
       </div>
 
-      {/* ── Priority Tasks (left) + Revenue & Loads (right) ── */}
-      <div className="grid-2col" style={{ marginBottom:16, alignItems:"start" }}>
-        <TaskPriorityPanel
-          priorityTasks={priorityTasks}
-          setPriorityTasks={setPriorityTasks}
-          tasks={tasks}
-          tiersOnly={["urgent","asap"]}
-        />
-        <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-          <Card>
-            <p style={{ fontWeight:700, marginBottom:10 }}>💰 This Week's Revenue</p>
-            <div className="grid-2col" style={{ gap:8, marginBottom:8 }}>
-              <div style={{ background:"#064e3b", borderRadius:8, padding:10, textAlign:"center" }}>
-                <p style={{ color:"var(--muted)", fontSize:10 }}>OO Dispatch Fees</p>
-                <p style={{ color:"#10B981", fontSize:22, fontWeight:900 }}>${ooFees.toLocaleString()}</p>
-                <p style={{ color:"#065f46", fontSize:10 }}>{drivers.filter(d=>d.weekGross>0).length} drivers × 12%</p>
-              </div>
-              <div style={{ background:"#431407", borderRadius:8, padding:10, textAlign:"center" }}>
-                <p style={{ color:"var(--muted)", fontSize:10 }}>Brokerage Margins</p>
-                <p style={{ color:"#F59E0B", fontSize:22, fontWeight:900 }}>${brokerProfit.toLocaleString()}</p>
-                <p style={{ color:"#7c2d12", fontSize:10 }}>{loads.filter(l=>l.type==="broker"&&l.status==="delivered").length} loads brokered</p>
-              </div>
+      {/* ── Revenue & Active Loads ── */}
+      <div className="grid-2col" style={{ marginBottom:16 }}>
+        <Card>
+          <p style={{ fontWeight:700, marginBottom:10 }}>💰 This Week's Revenue</p>
+          <div className="grid-2col" style={{ gap:8, marginBottom:8 }}>
+            <div style={{ background:"#064e3b", borderRadius:8, padding:10, textAlign:"center" }}>
+              <p style={{ color:"var(--muted)", fontSize:10 }}>OO Dispatch Fees</p>
+              <p style={{ color:"#10B981", fontSize:22, fontWeight:900 }}>${ooFees.toLocaleString()}</p>
+              <p style={{ color:"#065f46", fontSize:10 }}>{drivers.filter(d=>d.weekGross>0).length} drivers × 12%</p>
             </div>
-            <div style={{ background:"var(--bg-subtle)", borderRadius:8, padding:10, textAlign:"center" }}>
-              <p style={{ color:"var(--muted)", fontSize:10 }}>TOTAL WEEKLY PROFIT</p>
-              <p style={{ color:"#10B981", fontSize:28, fontWeight:900 }}>${totalProfit.toLocaleString()}</p>
-              <p style={{ color:"var(--dim)", fontSize:10, marginTop:2 }}>≈ ${(totalProfit*4.3).toLocaleString()}/mo · ${Math.round(totalProfit/5).toLocaleString()} per partner</p>
+            <div style={{ background:"#431407", borderRadius:8, padding:10, textAlign:"center" }}>
+              <p style={{ color:"var(--muted)", fontSize:10 }}>Brokerage Margins</p>
+              <p style={{ color:"#F59E0B", fontSize:22, fontWeight:900 }}>${brokerProfit.toLocaleString()}</p>
+              <p style={{ color:"#7c2d12", fontSize:10 }}>{loads.filter(l=>l.type==="broker"&&l.status==="delivered").length} loads brokered</p>
             </div>
-          </Card>
-          <Card>
-            <p style={{ fontWeight:700, marginBottom:10 }}>🚛 Active Loads</p>
-            {moving.length === 0 && <p style={{ color:"var(--muted)", fontSize:13 }}>No active loads right now.</p>}
-            {moving.map(l => (
-              <div key={l.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid var(--border)" }}>
-                <Badge label={l.status} color={statusColor(l.status)} small />
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.origin} → {l.dest}</p>
-                  <p style={{ fontSize:11, color:"var(--muted)" }}>{l.type==="oo" ? l.driver : (l.carrier||"Carrier TBD")}</p>
-                </div>
-                <p style={{ fontSize:13, fontWeight:700, color:"#10B981" }}>${l.rate.toLocaleString()}</p>
+          </div>
+          <div style={{ background:"var(--bg-subtle)", borderRadius:8, padding:10, textAlign:"center" }}>
+            <p style={{ color:"var(--muted)", fontSize:10 }}>TOTAL WEEKLY PROFIT</p>
+            <p style={{ color:"#10B981", fontSize:28, fontWeight:900 }}>${totalProfit.toLocaleString()}</p>
+            <p style={{ color:"var(--dim)", fontSize:10, marginTop:2 }}>≈ ${(totalProfit*4.3).toLocaleString()}/mo · ${Math.round(totalProfit/5).toLocaleString()} per partner</p>
+          </div>
+        </Card>
+        <Card>
+          <p style={{ fontWeight:700, marginBottom:10 }}>🚛 Active Loads</p>
+          {moving.length === 0 && <p style={{ color:"var(--muted)", fontSize:13 }}>No active loads right now.</p>}
+          {moving.map(l => (
+            <div key={l.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid var(--border)" }}>
+              <Badge label={l.status} color={statusColor(l.status)} small />
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.origin} → {l.dest}</p>
+                <p style={{ fontSize:11, color:"var(--muted)" }}>{l.type==="oo" ? l.driver : (l.carrier||"Carrier TBD")}</p>
               </div>
-            ))}
-          </Card>
-        </div>
+              <p style={{ fontSize:13, fontWeight:700, color:"#10B981" }}>${l.rate.toLocaleString()}</p>
+            </div>
+          ))}
+        </Card>
       </div>
 
       <div className="grid-2col" style={{ marginBottom:16 }}>
@@ -1805,20 +1843,185 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
   function delTask(id) {
     setPriorityTasks(prev => prev.filter(t => t.id!==id));
   }
-  function addTask(priority) {
+  async function addTask(priority) {
     if (!form.text.trim()) return;
-    setPriorityTasks(prev => [...prev, {
+    const newTask = {
       id: "pt_"+Date.now(),
       text: form.text.trim(),
       dept: form.dept,
       person: form.person.trim(),
       priority,
       done: false,
-    }]);
+    };
+    setPriorityTasks(prev => [...prev, newTask]);
     setForm({ text:"", dept:"", person:"" });
     setShowAdd(null);
+    // Fire Telegram notification for URGENT tasks
+    if (priority === "urgent") {
+      try {
+        await sb.functions.invoke("notify-urgent-task", {
+          body: { text: newTask.text, person: newTask.person, dept: newTask.dept },
+        });
+      } catch(e) { console.warn("Telegram notify failed:", e.message); }
+    }
   }
 
+  // ── Shared add-task modal (used in both modes) ──────────
+  const AddModal = () => !showAdd ? null : (
+    <Modal
+      title={`Add ${showAdd==="urgent"?"🔴 URGENT":showAdd==="asap"?"🟡 ASAP":"🟢 NORMAL"} Task`}
+      onClose={() => setShowAdd(null)}>
+      <Field label="TASK">
+        <input style={inp} autoFocus value={form.text}
+          onChange={e => setForm(f=>({...f,text:e.target.value}))}
+          onKeyDown={e => e.key==="Enter" && addTask(showAdd)}
+          placeholder="What needs to be done?" />
+      </Field>
+      <div className="form-grid">
+        <Field label="DEPARTMENT">
+          <select style={inp} value={form.dept} onChange={e=>setForm(f=>({...f,dept:e.target.value}))}>
+            <option value="">— Select —</option>
+            {DEPTS.map(d=><option key={d} value={d}>{d}</option>)}
+          </select>
+        </Field>
+        <Field label="ASSIGNED TO">
+          <input style={inp} value={form.person}
+            onChange={e=>setForm(f=>({...f,person:e.target.value}))}
+            placeholder="Person's name" />
+        </Field>
+      </div>
+      <div style={{ display:"flex", gap:8, marginTop:20, justifyContent:"flex-end" }}>
+        <button onClick={()=>setShowAdd(null)}
+          style={{ padding:"8px 16px", borderRadius:8, border:"1px solid var(--border-hi)", background:"none", color:"#9CA3AF" }}>Cancel</button>
+        <button onClick={()=>addTask(showAdd)}
+          style={{ padding:"8px 22px", borderRadius:8, border:"none", background:"#1d4ed8", color:"#fff", fontWeight:700 }}>Add Task</button>
+      </div>
+    </Modal>
+  );
+
+  // ══════════════════════════════════════════════════════
+  //  PROMINENT MODE — full-width banner above KPI cards
+  // ══════════════════════════════════════════════════════
+  if (prominent) {
+    const urgentAll    = priorityTasks.filter(t => t.priority==="urgent");
+    const asapAll      = priorityTasks.filter(t => t.priority==="asap");
+    const urgentActive = urgentAll.filter(t => !t.done);
+    const asapActive   = asapAll.filter(t => !t.done);
+
+    const openAdd = (tier) => { setShowAdd(tier); setForm({text:"",dept:"",person:""}); };
+
+    const addBtn = (tier, label, style) => (
+      <button onClick={() => openAdd(tier)}
+        style={{ fontSize:12, fontWeight:700, padding:"6px 16px", borderRadius:8, cursor:"pointer", whiteSpace:"nowrap", ...style }}>
+        {label}
+      </button>
+    );
+
+    return (
+      <div style={{ marginBottom:16 }}>
+
+        {/* ── URGENT section ── */}
+        <div className={urgentActive.length>0 ? "urgent-glow" : ""}
+          style={{ borderRadius:14, marginBottom:6,
+            border: urgentActive.length>0 ? "2px solid rgba(239,68,68,0.65)" : "1px solid rgba(239,68,68,0.2)",
+            background: urgentActive.length>0 ? "rgba(120,20,20,0.45)" : "rgba(25,8,8,0.3)",
+            padding:"14px 18px" }}>
+
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: urgentAll.length>0?12:0, flexWrap:"wrap", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              {urgentActive.length > 0 && <span className="pulse-dot" />}
+              <p style={{ fontWeight:900, fontSize: urgentActive.length>0?16:13, color:"#EF4444", letterSpacing:"0.05em" }}>
+                {urgentActive.length > 0
+                  ? `🚨 URGENT — ${urgentActive.length} TASK${urgentActive.length!==1?"S":""} NEED IMMEDIATE ACTION`
+                  : "🔴 URGENT"}
+              </p>
+              {urgentActive.length === 0 && urgentAll.length === 0 &&
+                <span style={{ fontSize:12, color:"rgba(239,68,68,0.45)" }}>No urgent tasks</span>}
+            </div>
+            {addBtn("urgent", "+ Add Urgent", { background:"#991b1b", border:"1px solid #EF4444", color:"#fca5a5" })}
+          </div>
+
+          {[...urgentActive, ...urgentAll.filter(t=>t.done)].map(t => (
+            <div key={t.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", borderRadius:10, marginBottom:6,
+              background: t.done?"rgba(0,0,0,0.3)":"rgba(239,68,68,0.13)",
+              border:`1px solid ${t.done?"rgba(239,68,68,0.12)":"rgba(239,68,68,0.4)"}`,
+              opacity: t.done?0.5:1, transition:"opacity 0.2s" }}>
+              <div onClick={()=>toggleDone(t.id)} style={{ width:28, height:28, borderRadius:8,
+                border:`2px solid ${t.done?"#EF4444":"rgba(239,68,68,0.7)"}`, background:t.done?"#EF4444":"transparent",
+                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer" }}>
+                {t.done && <span style={{ color:"#fff", fontSize:14, fontWeight:900 }}>✓</span>}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontSize:17, fontWeight:800, lineHeight:1.3,
+                  color: t.done?"#6B7280":"#fff",
+                  textDecoration: t.done?"line-through":"none" }}>{t.text}</p>
+                <div style={{ display:"flex", gap:8, marginTop:5, flexWrap:"wrap", alignItems:"center" }}>
+                  {t.dept   && <span style={{ fontSize:11, fontWeight:700, background:"rgba(239,68,68,0.2)", color:"#fca5a5", padding:"2px 8px", borderRadius:4 }}>{t.dept}</span>}
+                  {t.person && <span style={{ fontSize:12, color:"#9CA3AF" }}>👤 {t.person}</span>}
+                </div>
+              </div>
+              <button onClick={()=>delTask(t.id)}
+                style={{ background:"none", border:"none", color:"rgba(255,255,255,0.25)", fontSize:16, cursor:"pointer", padding:"0 4px", flexShrink:0 }}
+                onMouseEnter={e=>{e.target.style.color="#EF4444";}}
+                onMouseLeave={e=>{e.target.style.color="rgba(255,255,255,0.25)";}}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        {/* ── ASAP section ── */}
+        <div style={{ borderRadius:14,
+          border: asapActive.length>0 ? "1px solid rgba(245,158,11,0.55)" : "1px solid rgba(245,158,11,0.18)",
+          background: asapActive.length>0 ? "rgba(67,20,7,0.38)" : "rgba(20,10,0,0.22)",
+          padding:"12px 18px" }}>
+
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: asapAll.length>0?10:0, flexWrap:"wrap", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <p style={{ fontWeight:800, fontSize: asapActive.length>0?15:13, color:"#F59E0B", letterSpacing:"0.04em" }}>
+                {asapActive.length > 0
+                  ? `⚡ ASAP — ${asapActive.length} TASK${asapActive.length!==1?"S":""} DUE TODAY`
+                  : "⚡ ASAP"}
+              </p>
+              {asapActive.length === 0 && asapAll.length === 0 &&
+                <span style={{ fontSize:12, color:"rgba(245,158,11,0.4)" }}>No ASAP tasks</span>}
+            </div>
+            {addBtn("asap", "+ Add ASAP", { background:"#431407", border:"1px solid #F59E0B", color:"#fcd34d" })}
+          </div>
+
+          {[...asapActive, ...asapAll.filter(t=>t.done)].map(t => (
+            <div key={t.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 14px", borderRadius:9, marginBottom:5,
+              background: t.done?"rgba(0,0,0,0.25)":"rgba(245,158,11,0.09)",
+              border:`1px solid ${t.done?"rgba(245,158,11,0.12)":"rgba(245,158,11,0.3)"}`,
+              opacity: t.done?0.5:1, transition:"opacity 0.2s" }}>
+              <div onClick={()=>toggleDone(t.id)} style={{ width:24, height:24, borderRadius:6,
+                border:`2px solid ${t.done?"#F59E0B":"rgba(245,158,11,0.6)"}`, background:t.done?"#F59E0B":"transparent",
+                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer" }}>
+                {t.done && <span style={{ color:"#fff", fontSize:12, fontWeight:900 }}>✓</span>}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontSize:15, fontWeight:700,
+                  color: t.done?"#6B7280":"var(--text)",
+                  textDecoration: t.done?"line-through":"none" }}>{t.text}</p>
+                <div style={{ display:"flex", gap:6, marginTop:4, flexWrap:"wrap" }}>
+                  {t.dept   && <span style={{ fontSize:11, fontWeight:600, background:"rgba(245,158,11,0.15)", color:"#fcd34d", padding:"1px 7px", borderRadius:3 }}>{t.dept}</span>}
+                  {t.person && <span style={{ fontSize:11, color:"var(--muted)" }}>👤 {t.person}</span>}
+                </div>
+              </div>
+              <button onClick={()=>delTask(t.id)}
+                style={{ background:"none", border:"none", color:"rgba(245,158,11,0.3)", fontSize:14, cursor:"pointer", padding:"0 4px", flexShrink:0 }}
+                onMouseEnter={e=>{e.target.style.color="#EF4444";}}
+                onMouseLeave={e=>{e.target.style.color="rgba(245,158,11,0.3)";}}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        <AddModal />
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  COMPACT CARD MODE (Tasks tab / 3-tier view)
+  // ══════════════════════════════════════════════════════
   return (
     <Card>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
@@ -1832,29 +2035,19 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
           </span>
         )}
       </div>
-      {tiersOnly && urgentAsapTotal === 0 && (
-        <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"18px 0 10px" }}>
-          No urgent or ASAP tasks right now — go build something great.
-        </p>
-      )}
-      <div style={{ display:"grid", gap:12 }}
-           className={TIERS.length === 3 ? "grid-3col" : "grid-2col"}>
+      <div style={{ display:"grid", gap:12 }} className={TIERS.length===3?"grid-3col":"grid-2col"}>
         {TIERS.map(tier => {
           const all    = priorityTasks.filter(t => t.priority===tier.key);
           const active = all.filter(t => !t.done);
           const done   = all.filter(t => t.done);
           const sorted = [...active, ...done];
           const isCollapsed = collapsed[tier.key];
-
           return (
             <div key={tier.key} style={{ background:"var(--bg-subtle)", borderRadius:12, border:`1px solid ${tier.color}44`, overflow:"hidden", display:"flex", flexDirection:"column" }}>
-
-              {/* ── Tier header (collapsible) ── */}
-              <div
-                onClick={() => setCollapsed(prev => ({...prev, [tier.key]:!isCollapsed}))}
+              <div onClick={()=>setCollapsed(prev=>({...prev,[tier.key]:!isCollapsed}))}
                 style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", cursor:"pointer", background:tier.headerBg, userSelect:"none" }}
-                onMouseEnter={e => e.currentTarget.style.filter="brightness(1.2)"}
-                onMouseLeave={e => e.currentTarget.style.filter="brightness(1)"}>
+                onMouseEnter={e=>e.currentTarget.style.filter="brightness(1.2)"}
+                onMouseLeave={e=>e.currentTarget.style.filter="brightness(1)"}>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                   <span style={{ fontSize:16 }}>{tier.emoji}</span>
                   <div>
@@ -1863,121 +2056,41 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
                   </div>
                 </div>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ background:tier.color+"22", color:tier.color, fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:10 }}>
-                    {active.length}
-                  </span>
-                  <span style={{ color:"var(--muted)", fontSize:13, fontWeight:700 }}>{isCollapsed ? "▸" : "▾"}</span>
+                  <span style={{ background:tier.color+"22", color:tier.color, fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:10 }}>{active.length}</span>
+                  <span style={{ color:"var(--muted)", fontSize:13, fontWeight:700 }}>{isCollapsed?"▸":"▾"}</span>
                 </div>
               </div>
-
-              {/* ── Task list ── */}
               {!isCollapsed && (
                 <div style={{ padding:"8px 10px", flex:1 }}>
-                  {sorted.length === 0 && (
-                    <p style={{ color:"var(--muted)", fontSize:12, textAlign:"center", padding:"12px 0" }}>No tasks</p>
-                  )}
+                  {sorted.length===0 && <p style={{ color:"var(--muted)", fontSize:12, textAlign:"center", padding:"12px 0" }}>No tasks</p>}
                   {sorted.map(t => (
-                    <div key={t.id}
-                      style={{ display:"flex", alignItems:"flex-start", gap:8, padding:"8px 6px", borderRadius:8, marginBottom:2,
-                        opacity: t.done ? 0.4 : 1, transition:"opacity 0.2s" }}>
-                      {/* Checkbox */}
-                      <div
-                        onClick={() => toggleDone(t.id)}
-                        style={{ width:18, height:18, borderRadius:4, border:`2px solid ${t.done ? tier.color : "#374151"}`,
-                          background: t.done ? tier.color : "transparent",
-                          display:"flex", alignItems:"center", justifyContent:"center",
-                          flexShrink:0, cursor:"pointer", marginTop:2 }}>
+                    <div key={t.id} style={{ display:"flex", alignItems:"flex-start", gap:8, padding:"8px 6px", borderRadius:8, marginBottom:2, opacity:t.done?0.4:1, transition:"opacity 0.2s" }}>
+                      <div onClick={()=>toggleDone(t.id)} style={{ width:18, height:18, borderRadius:4, border:`2px solid ${t.done?tier.color:"#374151"}`, background:t.done?tier.color:"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer", marginTop:2 }}>
                         {t.done && <span style={{ color:"#fff", fontSize:10, fontWeight:900 }}>✓</span>}
                       </div>
-                      {/* Text + meta */}
                       <div style={{ flex:1, minWidth:0 }}>
-                        <p style={{ fontSize:12, fontWeight:600, lineHeight:1.35,
-                          color: t.done ? "var(--muted)" : "var(--text)",
-                          textDecoration: t.done ? "line-through" : "none" }}>
-                          {t.text}
-                        </p>
-                        <div style={{ display:"flex", gap:4, marginTop:3, flexWrap:"wrap", alignItems:"center" }}>
-                          {t.dept && (
-                            <span style={{ fontSize:10, background:"var(--border)", color:"var(--muted)",
-                              padding:"1px 6px", borderRadius:3, fontWeight:600 }}>
-                              {t.dept}
-                            </span>
-                          )}
-                          {t.person && (
-                            <span style={{ fontSize:10, color:"var(--dim)" }}>👤 {t.person}</span>
-                          )}
+                        <p style={{ fontSize:12, fontWeight:600, lineHeight:1.35, color:t.done?"var(--muted)":"var(--text)", textDecoration:t.done?"line-through":"none" }}>{t.text}</p>
+                        <div style={{ display:"flex", gap:4, marginTop:3, flexWrap:"wrap" }}>
+                          {t.dept   && <span style={{ fontSize:10, background:"var(--border)", color:"var(--muted)", padding:"1px 6px", borderRadius:3, fontWeight:600 }}>{t.dept}</span>}
+                          {t.person && <span style={{ fontSize:10, color:"var(--dim)" }}>👤 {t.person}</span>}
                         </div>
                       </div>
-                      {/* Delete */}
-                      <button
-                        onClick={() => delTask(t.id)}
-                        style={{ background:"none", border:"none", color:"var(--dim)", fontSize:13,
-                          cursor:"pointer", padding:"0 2px", flexShrink:0, opacity:0.4, lineHeight:1 }}
-                        onMouseEnter={e => { e.target.style.opacity=1; e.target.style.color="#EF4444"; }}
-                        onMouseLeave={e => { e.target.style.opacity=0.4; e.target.style.color="var(--dim)"; }}>
-                        ✕
-                      </button>
+                      <button onClick={()=>delTask(t.id)} style={{ background:"none", border:"none", color:"var(--dim)", fontSize:13, cursor:"pointer", padding:"0 2px", flexShrink:0, opacity:0.4, lineHeight:1 }}
+                        onMouseEnter={e=>{e.target.style.opacity=1;e.target.style.color="#EF4444";}}
+                        onMouseLeave={e=>{e.target.style.opacity=0.4;e.target.style.color="var(--dim)";}}>✕</button>
                     </div>
                   ))}
-
-                  {/* Add task button */}
-                  <button
-                    onClick={() => { setShowAdd(tier.key); setForm({ text:"", dept:"", person:"" }); }}
-                    style={{ width:"100%", marginTop:6, padding:"7px 0", border:"1px dashed #374151",
-                      borderRadius:8, background:"transparent", color:"var(--dim)", fontSize:11, cursor:"pointer" }}
-                    onMouseEnter={e => { e.target.style.borderColor="#6B7280"; e.target.style.color="#9CA3AF"; }}
-                    onMouseLeave={e => { e.target.style.borderColor="#374151"; e.target.style.color="var(--dim)"; }}>
-                    + Add task
-                  </button>
+                  <button onClick={()=>{setShowAdd(tier.key);setForm({text:"",dept:"",person:""}); }}
+                    style={{ width:"100%", marginTop:6, padding:"7px 0", border:"1px dashed #374151", borderRadius:8, background:"transparent", color:"var(--dim)", fontSize:11, cursor:"pointer" }}
+                    onMouseEnter={e=>{e.target.style.borderColor="#6B7280";e.target.style.color="#9CA3AF";}}
+                    onMouseLeave={e=>{e.target.style.borderColor="#374151";e.target.style.color="var(--dim)";}}>+ Add task</button>
                 </div>
               )}
             </div>
           );
         })}
       </div>
-
-      {/* ── Add Task Modal ── */}
-      {showAdd && (
-        <Modal
-          title={`Add ${showAdd === "urgent" ? "🔴 URGENT" : showAdd === "asap" ? "🟡 ASAP" : "🟢 NORMAL"} Task`}
-          onClose={() => setShowAdd(null)}>
-          <Field label="TASK">
-            <input
-              style={inp} autoFocus
-              value={form.text}
-              onChange={e => setForm(f => ({...f, text:e.target.value}))}
-              onKeyDown={e => e.key==="Enter" && addTask(showAdd)}
-              placeholder="What needs to be done?" />
-          </Field>
-          <div className="form-grid">
-            <Field label="DEPARTMENT">
-              <select style={inp} value={form.dept} onChange={e => setForm(f => ({...f, dept:e.target.value}))}>
-                <option value="">— Select —</option>
-                {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </Field>
-            <Field label="ASSIGNED TO">
-              <input
-                style={inp}
-                value={form.person}
-                onChange={e => setForm(f => ({...f, person:e.target.value}))}
-                placeholder="Person's name" />
-            </Field>
-          </div>
-          <div style={{ display:"flex", gap:8, marginTop:20, justifyContent:"flex-end" }}>
-            <button
-              onClick={() => setShowAdd(null)}
-              style={{ padding:"8px 16px", borderRadius:8, border:"1px solid var(--border-hi)", background:"none", color:"#9CA3AF" }}>
-              Cancel
-            </button>
-            <button
-              onClick={() => addTask(showAdd)}
-              style={{ padding:"8px 22px", borderRadius:8, border:"none", background:"#1d4ed8", color:"#fff", fontWeight:700 }}>
-              Add Task
-            </button>
-          </div>
-        </Modal>
-      )}
+      <AddModal />
     </Card>
   );
 }
