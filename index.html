@@ -205,30 +205,53 @@ function App() {
     </div>
   );
   if (!session) return <LoginPage />;
-  return <Dashboard session={session} />;
+  const isAdmin = session.user?.user_metadata?.role === "admin";
+  return <Dashboard session={session} isAdmin={isAdmin} />;
 }
 
 // ════════════════════════════════════════
-//  LOGIN PAGE
+//  LOGIN PAGE  (invite-only — no public signup)
 // ════════════════════════════════════════
 function LoginPage() {
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState("login"); // "login" | "request"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [roleReq, setRoleReq] = useState("Staff");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function submit(e) {
+  const iStyle = { width:"100%", background:"#1f2937", border:"1px solid #374151", color:"#e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:14, outline:"none", boxSizing:"border-box" };
+
+  async function submitLogin(e) {
     e.preventDefault(); setBusy(true); setErr("");
-    const { error } = mode === "login"
-      ? await sb.auth.signInWithPassword({ email, password })
-      : await sb.auth.signUp({ email, password });
+    const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) setErr(error.message);
-    else if (mode === "signup") setErr("✅ Check your email to confirm, then sign in.");
     setBusy(false);
   }
 
-  const iStyle = { width:"100%", background:"#1f2937", border:"1px solid #374151", color:"#e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:14, outline:"none", boxSizing:"border-box" };
+  async function submitRequest(e) {
+    e.preventDefault(); setBusy(true); setErr("");
+    // Check for duplicate requests
+    const { data: existing } = await sb.from("user_requests").select("id,status").eq("email", email.trim().toLowerCase()).maybeSingle();
+    if (existing) {
+      setErr(existing.status === "pending"
+        ? "⏳ A request for this email is already pending admin review."
+        : existing.status === "approved"
+          ? "✅ Your request was approved — check your email for login instructions."
+          : "❌ Your request was previously rejected. Contact an admin directly.");
+      setBusy(false); return;
+    }
+    const { error } = await sb.from("user_requests").insert({
+      email: email.trim().toLowerCase(),
+      full_name: fullName.trim(),
+      role_requested: roleReq,
+      status: "pending",
+    });
+    if (error) setErr(error.message);
+    else setErr("✅ Request submitted! An admin will review and contact you shortly.");
+    setBusy(false);
+  }
 
   return (
     <div style={{ minHeight:"100vh", background:"#030712", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
@@ -236,34 +259,66 @@ function LoginPage() {
         <div style={{ textAlign:"center", marginBottom:32 }}>
           <div style={{ fontSize:48, marginBottom:8 }}>🚛</div>
           <p style={{ color:"#e5e7eb", fontWeight:900, fontSize:22 }}>Elite Trucking Lanes</p>
-          <p style={{ color:"#6B7280", fontSize:13, marginTop:4 }}>HQ Dashboard</p>
+          <p style={{ color:"#6B7280", fontSize:13, marginTop:4 }}>HQ Dashboard · Invite Only</p>
         </div>
+
         <div style={{ background:"#111827", border:"1px solid #1f2937", borderRadius:16, padding:28 }}>
-          <p style={{ color:"#e5e7eb", fontWeight:700, fontSize:15, marginBottom:20, textAlign:"center" }}>
-            {mode === "login" ? "Sign in to your account" : "Create an account"}
-          </p>
-          <form onSubmit={submit}>
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>EMAIL</label>
-              <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" style={iStyle} />
-            </div>
-            <div style={{ marginBottom:20 }}>
-              <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>PASSWORD</label>
-              <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={iStyle} />
-            </div>
-            {err && <p style={{ color:err.startsWith("✅")?"#10B981":"#EF4444", fontSize:12, marginBottom:14, textAlign:"center" }}>{err}</p>}
-            <button type="submit" disabled={busy}
-              style={{ width:"100%", padding:"11px 0", background:busy?"#1e3a5f":"#1d4ed8", border:"none", color:"#fff", borderRadius:8, fontWeight:700, fontSize:14, cursor:busy?"not-allowed":"pointer" }}>
-              {busy ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
-            </button>
-          </form>
-          <p style={{ textAlign:"center", marginTop:18, fontSize:12, color:"#6B7280" }}>
-            {mode === "login" ? "No account? " : "Already have one? "}
-            <span onClick={()=>{ setMode(mode==="login"?"signup":"login"); setErr(""); }}
-              style={{ color:"#3B82F6", cursor:"pointer", fontWeight:700 }}>
-              {mode === "login" ? "Sign Up" : "Sign In"}
-            </span>
-          </p>
+          {mode === "login" ? (
+            <>
+              <p style={{ color:"#e5e7eb", fontWeight:700, fontSize:15, marginBottom:20, textAlign:"center" }}>Sign in to your account</p>
+              <form onSubmit={submitLogin}>
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>EMAIL</label>
+                  <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" style={iStyle} />
+                </div>
+                <div style={{ marginBottom:20 }}>
+                  <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>PASSWORD</label>
+                  <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={iStyle} />
+                </div>
+                {err && <p style={{ color:"#EF4444", fontSize:12, marginBottom:14, textAlign:"center" }}>{err}</p>}
+                <button type="submit" disabled={busy}
+                  style={{ width:"100%", padding:"11px 0", background:busy?"#1e3a5f":"#1d4ed8", border:"none", color:"#fff", borderRadius:8, fontWeight:700, fontSize:14, cursor:busy?"not-allowed":"pointer" }}>
+                  {busy ? "Please wait…" : "Sign In"}
+                </button>
+              </form>
+              <p style={{ textAlign:"center", marginTop:18, fontSize:12, color:"#6B7280" }}>
+                Don't have access?{" "}
+                <span onClick={()=>{ setMode("request"); setErr(""); }} style={{ color:"#3B82F6", cursor:"pointer", fontWeight:700 }}>Request Access</span>
+              </p>
+            </>
+          ) : (
+            <>
+              <p style={{ color:"#e5e7eb", fontWeight:700, fontSize:15, marginBottom:6, textAlign:"center" }}>Request Access</p>
+              <p style={{ color:"#6B7280", fontSize:12, marginBottom:20, textAlign:"center", lineHeight:1.5 }}>
+                This dashboard is invite-only. Submit your info and an admin will review your request.
+              </p>
+              <form onSubmit={submitRequest}>
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>FULL NAME</label>
+                  <input type="text" required value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="Your full name" style={iStyle} />
+                </div>
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>EMAIL</label>
+                  <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" style={iStyle} />
+                </div>
+                <div style={{ marginBottom:20 }}>
+                  <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>ROLE REQUESTED</label>
+                  <select required value={roleReq} onChange={e=>setRoleReq(e.target.value)} style={iStyle}>
+                    {["Dispatch","Recruiting","Sales","Compliance","Finance","Staff"].map(r => <option key={r}>{r}</option>)}
+                  </select>
+                </div>
+                {err && <p style={{ color:err.startsWith("✅")?"#10B981":err.startsWith("⏳")?"#F59E0B":"#EF4444", fontSize:12, marginBottom:14, textAlign:"center" }}>{err}</p>}
+                <button type="submit" disabled={busy}
+                  style={{ width:"100%", padding:"11px 0", background:busy?"#1e3a5f":"#1d4ed8", border:"none", color:"#fff", borderRadius:8, fontWeight:700, fontSize:14, cursor:busy?"not-allowed":"pointer" }}>
+                  {busy ? "Submitting…" : "Submit Request"}
+                </button>
+              </form>
+              <p style={{ textAlign:"center", marginTop:18, fontSize:12, color:"#6B7280" }}>
+                Already have access?{" "}
+                <span onClick={()=>{ setMode("login"); setErr(""); }} style={{ color:"#3B82F6", cursor:"pointer", fontWeight:700 }}>Sign In</span>
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -273,7 +328,7 @@ function LoginPage() {
 // ════════════════════════════════════════
 //  DASHBOARD
 // ════════════════════════════════════════
-function Dashboard({ session }) {
+function Dashboard({ session, isAdmin }) {
   const [tab, setTab] = useState("overview");
   const [drivers,     _setDrivers]     = useState([]);
   const [loads,       _setLoads]       = useState([]);
@@ -419,6 +474,7 @@ function Dashboard({ session }) {
     { id:"operations",  label:"📡 Operations" },
     { id:"people",      label:"👥 People" },
     { id:"finance",     label:"💰 Finance" },
+    ...(isAdmin ? [{ id:"admin", label:"🔐 Admin" }] : []),
   ];
 
   // ── Motivational modal on first load ──
@@ -560,6 +616,7 @@ function Dashboard({ session }) {
         {tab==="people"     && <PeopleTab            drivers={drivers} setDrivers={setDrivers} contacts={contacts} setContacts={setContacts} />}
         {tab==="finance"    && <FinanceComplianceTab loads={loads} setLoads={setLoads} drivers={drivers} ooFees={ooFees} brokerProfit={brokerProfit} totalProfit={totalProfit} brokerLoads={brokerLoads} setBrokerLoads={setBrokerLoads} alerts={alerts} />}
         {tab==="tasks"      && <TasksTab             tasks={tasks} setTasks={setTasks} priorityTasks={priorityTasks} setPriorityTasks={setPriorityTasks} />}
+        {tab==="admin"      && isAdmin && <AdminTab />}
       </div>
     </div>
   );
@@ -2338,6 +2395,169 @@ function TasksTab({ tasks, setTasks, priorityTasks, setPriorityTasks }) {
             <button onClick={addRole} style={{ padding:"8px 20px", borderRadius:8, border:"none", background:"#1d4ed8", color:"#fff", fontWeight:700 }}>Add</button>
           </div>
         </Modal>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  ADMIN TAB — access requests management
+// ════════════════════════════════════════
+function AdminTab() {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [busy, setBusy]         = useState(null); // request id currently being acted on
+  const [msg, setMsg]           = useState("");
+
+  async function load() {
+    setLoading(true);
+    const { data, error } = await sb.from("user_requests").select("*").order("created_at", { ascending: false });
+    if (!error) setRequests(data || []);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function approve(req) {
+    setBusy(req.id); setMsg("");
+    try {
+      const { data, error } = await sb.functions.invoke("approve-user-request", {
+        body: { request_id: req.id, email: req.email, full_name: req.full_name, role: req.role_requested },
+      });
+      if (error || data?.error) {
+        setMsg("❌ " + (error?.message || data?.error));
+      } else {
+        setMsg(`✅ Account created for ${req.email} — they'll receive a password-setup email.`);
+        setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status:"approved" } : r));
+      }
+    } catch(e) {
+      setMsg("❌ " + e.message);
+    }
+    setBusy(null);
+  }
+
+  async function reject(req) {
+    setBusy(req.id); setMsg("");
+    const { error } = await sb.from("user_requests").update({ status:"rejected" }).eq("id", req.id);
+    if (error) setMsg("❌ " + error.message);
+    else setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status:"rejected" } : r));
+    setBusy(null);
+  }
+
+  const pending  = requests.filter(r => r.status === "pending");
+  const reviewed = requests.filter(r => r.status !== "pending");
+
+  const statusBadge = (s) => {
+    const map = { pending:["#F59E0B","#7c2d12"], approved:["#10B981","#064e3b"], rejected:["#EF4444","#7f1d1d"] };
+    const [color, bg] = map[s] || ["#6B7280","#111827"];
+    return <span style={{ fontSize:11, fontWeight:700, color, background:bg+"88", padding:"2px 8px", borderRadius:6, textTransform:"uppercase" }}>{s}</span>;
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+        <div>
+          <p style={{ fontWeight:900, fontSize:18 }}>🔐 Access Requests</p>
+          <p style={{ color:"var(--muted)", fontSize:12, marginTop:2 }}>Review and approve or reject dashboard access requests</p>
+        </div>
+        <button onClick={load} style={{ padding:"6px 14px", borderRadius:8, border:"1px solid var(--border-hi)", background:"var(--bg-subtle)", color:"var(--muted)", fontSize:12, fontWeight:700 }}>↻ Refresh</button>
+      </div>
+
+      {msg && (
+        <div style={{ padding:"10px 16px", borderRadius:10, marginBottom:16, background: msg.startsWith("✅") ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", border:`1px solid ${msg.startsWith("✅")?"#10B981":"#EF4444"}44` }}>
+          <p style={{ fontSize:13, color: msg.startsWith("✅") ? "#34d399" : "#fca5a5" }}>{msg}</p>
+        </div>
+      )}
+
+      {loading ? (
+        <p style={{ color:"var(--muted)", padding:32, textAlign:"center" }}>Loading requests…</p>
+      ) : pending.length === 0 && reviewed.length === 0 ? (
+        <Card><p style={{ color:"var(--muted)", textAlign:"center", padding:24 }}>No access requests yet.</p></Card>
+      ) : (
+        <>
+          {/* ── Pending ── */}
+          {pending.length > 0 && (
+            <Card style={{ marginBottom:16 }}>
+              <p style={{ fontWeight:800, fontSize:13, marginBottom:12, color:"#F59E0B" }}>⏳ Pending ({pending.length})</p>
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", fontSize:13 }}>
+                  <thead>
+                    <tr style={{ color:"var(--muted)", fontSize:11, textTransform:"uppercase", textAlign:"left" }}>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Name</th>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Email</th>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Role Requested</th>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Submitted</th>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pending.map(r => (
+                      <tr key={r.id} style={{ borderTop:"1px solid var(--border)" }}>
+                        <td style={{ padding:"10px 10px", fontWeight:700 }}>{r.full_name}</td>
+                        <td style={{ padding:"10px 10px", color:"var(--muted)" }}>{r.email}</td>
+                        <td style={{ padding:"10px 10px" }}>
+                          <span style={{ background:"rgba(99,102,241,0.15)", color:"#a5b4fc", fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:5 }}>{r.role_requested}</span>
+                        </td>
+                        <td style={{ padding:"10px 10px", color:"var(--muted)", fontSize:11 }}>
+                          {new Date(r.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                        </td>
+                        <td style={{ padding:"10px 10px" }}>
+                          <div style={{ display:"flex", gap:6 }}>
+                            <button
+                              disabled={busy === r.id}
+                              onClick={() => approve(r)}
+                              style={{ padding:"5px 14px", borderRadius:7, border:"none", background: busy===r.id?"#064e3b":"#10B981", color:"#fff", fontWeight:700, fontSize:12, cursor: busy===r.id?"not-allowed":"pointer" }}>
+                              {busy === r.id ? "…" : "✓ Approve"}
+                            </button>
+                            <button
+                              disabled={busy === r.id}
+                              onClick={() => reject(r)}
+                              style={{ padding:"5px 14px", borderRadius:7, border:"1px solid #EF4444", background:"transparent", color:"#EF4444", fontWeight:700, fontSize:12, cursor: busy===r.id?"not-allowed":"pointer" }}>
+                              ✕ Reject
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* ── Reviewed ── */}
+          {reviewed.length > 0 && (
+            <Card>
+              <p style={{ fontWeight:800, fontSize:13, marginBottom:12, color:"var(--muted)" }}>History ({reviewed.length})</p>
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", fontSize:13 }}>
+                  <thead>
+                    <tr style={{ color:"var(--muted)", fontSize:11, textTransform:"uppercase", textAlign:"left" }}>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Name</th>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Email</th>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Role</th>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Status</th>
+                      <th style={{ padding:"6px 10px", fontWeight:700 }}>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewed.map(r => (
+                      <tr key={r.id} style={{ borderTop:"1px solid var(--border)", opacity:0.7 }}>
+                        <td style={{ padding:"8px 10px" }}>{r.full_name}</td>
+                        <td style={{ padding:"8px 10px", color:"var(--muted)" }}>{r.email}</td>
+                        <td style={{ padding:"8px 10px", color:"var(--muted)" }}>{r.role_requested}</td>
+                        <td style={{ padding:"8px 10px" }}>{statusBadge(r.status)}</td>
+                        <td style={{ padding:"8px 10px", color:"var(--muted)", fontSize:11 }}>
+                          {new Date(r.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );
