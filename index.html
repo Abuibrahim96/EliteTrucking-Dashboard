@@ -171,6 +171,21 @@ const TASKS0 = [
   { role:"Finance",    color:"#EF4444", emoji:"💰", tasks:[] },
 ];
 
+// ── pre-seeded priority tasks (persisted to Supabase on first load) ──
+const SEED_PRIORITY_TASKS = [
+  {
+    id: "pt_seed_brokerage_mc",
+    text: "Open Brokerage MC",
+    dept: "Compliance",
+    person: "",
+    priority: "urgent",
+    deadline: "2026-04-10",
+    notes: "Must be completed before April 10th — required to operate as a broker",
+    done: false,
+    seeded: true,
+  },
+];
+
 // ════════════════════════════════════════
 //  APP — auth gate
 // ════════════════════════════════════════
@@ -297,15 +312,23 @@ function Dashboard({ session }) {
         sb.from("loads").select("*"),
         sb.from("broker_loads").select("*"),
         sb.from("contacts").select("*"),
-        sb.from("app_settings").select("*").eq("key","tasks").maybeSingle(),
-        sb.from("app_settings").select("*").eq("key","priority_tasks").maybeSingle(),
+        sb.from("app_settings").select("*").eq("key","tasks"),
+        sb.from("app_settings").select("*").eq("key","priority_tasks"),
       ]);
       _setDrivers(    (dr.data||[]).map(r=>r.data));
       _setLoads(      (lo.data||[]).map(r=>r.data));
       _setBrokerLoads((bl.data||[]).map(r=>r.data));
       _setContacts(   (co.data||[]).map(r=>r.data));
-      if (st.data?.value) _setTasks(st.data.value);
-      if (pt.data?.value) _setPriorityTasks(pt.data.value);
+      // Pick the last row in case of duplicates (caused by missing onConflict in past upserts)
+      const stRow = st.data && st.data.length > 0 ? st.data[st.data.length - 1] : null;
+      const ptRow = pt.data && pt.data.length > 0 ? pt.data[pt.data.length - 1] : null;
+      if (stRow?.value) _setTasks(stRow.value);
+      // Merge seed tasks: prepend any seeds not already present, then persist
+      const loadedPT = ptRow?.value || [];
+      const missingSeeds = SEED_PRIORITY_TASKS.filter(s => !loadedPT.some(t => t.id === s.id));
+      const mergedPT = missingSeeds.length > 0 ? [...missingSeeds, ...loadedPT] : loadedPT;
+      if (missingSeeds.length > 0) sb.from("app_settings").upsert({ key:"priority_tasks", value: mergedPT }, { onConflict: "key" });
+      _setPriorityTasks(mergedPT);
       setDbReady(true);
     })();
   }, []);
@@ -318,11 +341,13 @@ function Dashboard({ session }) {
     };
     const pullTasks = async () => {
       const [st, pt] = await Promise.all([
-        sb.from("app_settings").select("*").eq("key","tasks").maybeSingle(),
-        sb.from("app_settings").select("*").eq("key","priority_tasks").maybeSingle(),
+        sb.from("app_settings").select("*").eq("key","tasks"),
+        sb.from("app_settings").select("*").eq("key","priority_tasks"),
       ]);
-      if (st.data?.value) _setTasks(st.data.value);
-      if (pt.data?.value) _setPriorityTasks(pt.data.value);
+      const stRow = st.data && st.data.length > 0 ? st.data[st.data.length - 1] : null;
+      const ptRow = pt.data && pt.data.length > 0 ? pt.data[pt.data.length - 1] : null;
+      if (stRow?.value) _setTasks(stRow.value);
+      if (ptRow?.value) _setPriorityTasks(ptRow.value);
     };
     const ch = sb.channel("realtime-all")
       .on("postgres_changes",{event:"*",schema:"public",table:"drivers"},      pull("drivers",     _setDrivers))
@@ -349,14 +374,14 @@ function Dashboard({ session }) {
   function setTasks(fn) {
     _setTasks(prev => {
       const next = typeof fn==="function" ? fn(prev) : fn;
-      sb.from("app_settings").upsert({ key:"tasks", value: next });
+      sb.from("app_settings").upsert({ key:"tasks", value: next }, { onConflict: "key" });
       return next;
     });
   }
   function setPriorityTasks(fn) {
     _setPriorityTasks(prev => {
       const next = typeof fn==="function" ? fn(prev) : fn;
-      sb.from("app_settings").upsert({ key:"priority_tasks", value: next });
+      sb.from("app_settings").upsert({ key:"priority_tasks", value: next }, { onConflict: "key" });
       return next;
     });
   }
@@ -1898,7 +1923,7 @@ function FinanceComplianceTab({ loads, setLoads, drivers, ooFees, brokerProfit, 
 function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }) {
   const [collapsed, setCollapsed] = useState({ urgent:false, asap:false, normal:false });
   const [showAdd, setShowAdd] = useState(null);
-  const [form, setForm] = useState({ text:"", dept:"", person:"" });
+  const [form, setForm] = useState({ text:"", dept:"", person:"", deadline:"", notes:"" });
 
   const ALL_TIERS = [
     { key:"urgent", label:"URGENT", emoji:"🔴", color:"#EF4444", headerBg:"rgba(127,29,29,0.35)", desc:"Needs to be done immediately" },
@@ -1925,11 +1950,13 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
       text: form.text.trim(),
       dept: form.dept,
       person: form.person.trim(),
+      deadline: form.deadline || "",
+      notes: form.notes ? form.notes.trim() : "",
       priority,
       done: false,
     };
     setPriorityTasks(prev => [...prev, newTask]);
-    setForm({ text:"", dept:"", person:"" });
+    setForm({ text:"", dept:"", person:"", deadline:"", notes:"" });
     setShowAdd(null);
     // Fire Telegram notification for URGENT tasks
     if (priority === "urgent") {
@@ -1964,7 +1991,16 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
             onChange={e=>setForm(f=>({...f,person:e.target.value}))}
             placeholder="Person's name" />
         </Field>
+        <Field label="DEADLINE">
+          <input type="date" style={inp} value={form.deadline||""}
+            onChange={e=>setForm(f=>({...f,deadline:e.target.value}))} />
+        </Field>
       </div>
+      <Field label="NOTES">
+        <textarea style={{...inp, minHeight:60, resize:"vertical"}} value={form.notes||""}
+          onChange={e=>setForm(f=>({...f,notes:e.target.value}))}
+          placeholder="Optional notes…" />
+      </Field>
       <div style={{ display:"flex", gap:8, marginTop:20, justifyContent:"flex-end" }}>
         <button onClick={()=>setShowAdd(null)}
           style={{ padding:"8px 16px", borderRadius:8, border:"1px solid var(--border-hi)", background:"none", color:"#9CA3AF" }}>Cancel</button>
@@ -1983,7 +2019,7 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
     const urgentActive = urgentAll.filter(t => !t.done);
     const asapActive   = asapAll.filter(t => !t.done);
 
-    const openAdd = (tier) => { setShowAdd(tier); setForm({text:"",dept:"",person:""}); };
+    const openAdd = (tier) => { setShowAdd(tier); setForm({text:"",dept:"",person:"",deadline:"",notes:""}); };
 
     const addBtn = (tier, label, style) => (
       <button onClick={() => openAdd(tier)}
@@ -2031,9 +2067,11 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
                   color: t.done?"#6B7280":"#fff",
                   textDecoration: t.done?"line-through":"none" }}>{t.text}</p>
                 <div style={{ display:"flex", gap:8, marginTop:5, flexWrap:"wrap", alignItems:"center" }}>
-                  {t.dept   && <span style={{ fontSize:11, fontWeight:700, background:"rgba(239,68,68,0.2)", color:"#fca5a5", padding:"2px 8px", borderRadius:4 }}>{t.dept}</span>}
-                  {t.person && <span style={{ fontSize:12, color:"#9CA3AF" }}>👤 {t.person}</span>}
+                  {t.dept     && <span style={{ fontSize:11, fontWeight:700, background:"rgba(239,68,68,0.2)", color:"#fca5a5", padding:"2px 8px", borderRadius:4 }}>{t.dept}</span>}
+                  {t.person   && <span style={{ fontSize:12, color:"#9CA3AF" }}>👤 {t.person}</span>}
+                  {t.deadline && <span style={{ fontSize:11, fontWeight:700, color: daysUntil(t.deadline)<=7?"#FCA5A5":"#fcd34d" }}>📅 Due {new Date(t.deadline+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>}
                 </div>
+                {t.notes && <p style={{ fontSize:12, color:"#9CA3AF", marginTop:5, lineHeight:1.4 }}>{t.notes}</p>}
               </div>
               <button onClick={()=>delTask(t.id)}
                 style={{ background:"none", border:"none", color:"rgba(255,255,255,0.25)", fontSize:16, cursor:"pointer", padding:"0 4px", flexShrink:0 }}
@@ -2077,9 +2115,11 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
                   color: t.done?"#6B7280":"var(--text)",
                   textDecoration: t.done?"line-through":"none" }}>{t.text}</p>
                 <div style={{ display:"flex", gap:6, marginTop:4, flexWrap:"wrap" }}>
-                  {t.dept   && <span style={{ fontSize:11, fontWeight:600, background:"rgba(245,158,11,0.15)", color:"#fcd34d", padding:"1px 7px", borderRadius:3 }}>{t.dept}</span>}
-                  {t.person && <span style={{ fontSize:11, color:"var(--muted)" }}>👤 {t.person}</span>}
+                  {t.dept     && <span style={{ fontSize:11, fontWeight:600, background:"rgba(245,158,11,0.15)", color:"#fcd34d", padding:"1px 7px", borderRadius:3 }}>{t.dept}</span>}
+                  {t.person   && <span style={{ fontSize:11, color:"var(--muted)" }}>👤 {t.person}</span>}
+                  {t.deadline && <span style={{ fontSize:11, color:"#fcd34d" }}>📅 Due {new Date(t.deadline+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>}
                 </div>
+                {t.notes && <p style={{ fontSize:11, color:"var(--muted)", marginTop:4, lineHeight:1.4 }}>{t.notes}</p>}
               </div>
               <button onClick={()=>delTask(t.id)}
                 style={{ background:"none", border:"none", color:"rgba(245,158,11,0.3)", fontSize:14, cursor:"pointer", padding:"0 4px", flexShrink:0 }}
@@ -2146,16 +2186,18 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }
                       <div style={{ flex:1, minWidth:0 }}>
                         <p style={{ fontSize:12, fontWeight:600, lineHeight:1.35, color:t.done?"var(--muted)":"var(--text)", textDecoration:t.done?"line-through":"none" }}>{t.text}</p>
                         <div style={{ display:"flex", gap:4, marginTop:3, flexWrap:"wrap" }}>
-                          {t.dept   && <span style={{ fontSize:10, background:"var(--border)", color:"var(--muted)", padding:"1px 6px", borderRadius:3, fontWeight:600 }}>{t.dept}</span>}
-                          {t.person && <span style={{ fontSize:10, color:"var(--dim)" }}>👤 {t.person}</span>}
+                          {t.dept     && <span style={{ fontSize:10, background:"var(--border)", color:"var(--muted)", padding:"1px 6px", borderRadius:3, fontWeight:600 }}>{t.dept}</span>}
+                          {t.person   && <span style={{ fontSize:10, color:"var(--dim)" }}>👤 {t.person}</span>}
+                          {t.deadline && <span style={{ fontSize:10, color: daysUntil(t.deadline)<=7?"#EF4444":"var(--muted)" }}>📅 {new Date(t.deadline+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>}
                         </div>
+                        {t.notes && <p style={{ fontSize:10, color:"var(--dim)", marginTop:2, lineHeight:1.3 }}>{t.notes}</p>}
                       </div>
                       <button onClick={()=>delTask(t.id)} style={{ background:"none", border:"none", color:"var(--dim)", fontSize:13, cursor:"pointer", padding:"0 2px", flexShrink:0, opacity:0.4, lineHeight:1 }}
                         onMouseEnter={e=>{e.target.style.opacity=1;e.target.style.color="#EF4444";}}
                         onMouseLeave={e=>{e.target.style.opacity=0.4;e.target.style.color="var(--dim)";}}>✕</button>
                     </div>
                   ))}
-                  <button onClick={()=>{setShowAdd(tier.key);setForm({text:"",dept:"",person:""}); }}
+                  <button onClick={()=>{setShowAdd(tier.key);setForm({text:"",dept:"",person:"",deadline:"",notes:""}); }}
                     style={{ width:"100%", marginTop:6, padding:"7px 0", border:"1px dashed #374151", borderRadius:8, background:"transparent", color:"var(--dim)", fontSize:11, cursor:"pointer" }}
                     onMouseEnter={e=>{e.target.style.borderColor="#6B7280";e.target.style.color="#9CA3AF";}}
                     onMouseLeave={e=>{e.target.style.borderColor="#374151";e.target.style.color="var(--dim)";}}>+ Add task</button>
