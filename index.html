@@ -3,477 +3,2101 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Company HQ Dashboard</title>
+<title>Elite Trucking Lanes — HQ</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
+/* ── CSS variables (dark default) ── */
+:root {
+  --bg:        #030712;
+  --bg-card:   #111827;
+  --bg-nav:    #0d1117;
+  --bg-subtle: #1f2937;
+  --border:    #1f2937;
+  --border-hi: #374151;
+  --text:      #e5e7eb;
+  --muted:     #6B7280;
+  --dim:       #4B5563;
+}
+[data-theme="light"] {
+  --bg:        #f1f5f9;
+  --bg-card:   #ffffff;
+  --bg-nav:    #ffffff;
+  --bg-subtle: #f1f5f9;
+  --border:    #e2e8f0;
+  --border-hi: #cbd5e1;
+  --text:      #0f172a;
+  --muted:     #64748b;
+  --dim:       #94a3b8;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #030712; }
-button { font-family: system-ui, sans-serif; }
-table { border-spacing: 0; }
+body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; transition: background 0.2s, color 0.2s; }
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+table { border-spacing: 0; border-collapse: collapse; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-subtle); }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+
+/* ── Responsive layout classes ── */
+.grid-kpi   { display: grid; gap: 8px; }
+.grid-2col  { display: grid; gap: 16px; }
+.form-grid  { display: grid; gap: 12px; }
+.kanban     { display: grid; gap: 10px; overflow-x: auto; }
+.table-scroll { overflow-x: auto; border-radius: 12px; }
+
+/* Desktop */
+@media (min-width: 769px) {
+  .grid-kpi-top    { grid-template-columns: repeat(4, 1fr); }
+  .grid-kpi-bottom { grid-template-columns: repeat(4, 1fr); }
+  .grid-2col       { grid-template-columns: 1fr 1fr; }
+  .grid-3col       { grid-template-columns: 1fr 1fr 1fr; }
+  .form-grid       { grid-template-columns: 1fr 1fr; }
+  .kanban-5        { grid-template-columns: repeat(5, minmax(180px, 1fr)); }
+  .kanban-4        { grid-template-columns: repeat(4, minmax(200px, 1fr)); }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .grid-kpi-top, .grid-kpi-bottom { grid-template-columns: repeat(2, 1fr); }
+  .grid-2col, .grid-3col          { grid-template-columns: 1fr; }
+  .form-grid                       { grid-template-columns: 1fr; }
+  .form-full                       { grid-column: 1 / -1 !important; }
+  .kanban-5, .kanban-4             { grid-auto-flow: column; grid-auto-columns: 80vw; }
+  .hide-mobile                     { display: none !important; }
+  .nav-brand p:last-child          { display: none; }
+  .tab-label-short::after { content: attr(data-short); }
+  .tab-label-short span   { display: none; }
+}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState } = React;
+const { useState, useCallback, useEffect } = React;
 
+const TODAY = new Date().toISOString().split('T')[0];
 
-const sampleOOs = [
-  { id: 1, name: "Ahmed K.", truck: "2019 Freightliner", type: "OO", status: "active", mvr: "Clean", loads: 6, weekGross: 4800 },
-  { id: 2, name: "Omar S.", truck: "2020 Peterbilt", type: "OO", status: "active", mvr: "Clean", loads: 5, weekGross: 4200 },
-  { id: 3, name: "Yusuf M.", truck: "2018 Kenworth", type: "Leased", status: "active", mvr: "1 minor", csa: 22, loads: 4, weekGross: 3600 },
-  { id: 4, name: "Ibrahim R.", truck: "2021 Volvo", type: "OO", status: "on-load", mvr: "Clean", loads: 7, weekGross: 5100 },
-  { id: 5, name: "Khalid A.", truck: "2017 International", type: "Leased", status: "active", mvr: "2 violations", csa: 31, loads: 5, weekGross: 5000 },
-];
+const SUPABASE_URL = "https://xhgaplwhsvzcqebfpfux.supabase.co";
+const SUPABASE_KEY = "sb_publishable_FzW0IthgtViSKHyNEnCIeQ_MPt1_Jlj";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-var ooLoads = [
-  { id: 1001, shipper: "Amazon Relay", origin: "Houston, TX", dest: "Dallas, TX", rate: 1800, driver: "Ahmed K.", status: "delivered", source: "oo" },
-  { id: 1002, shipper: "DAT Load Board", origin: "Dallas, TX", dest: "Atlanta, GA", rate: 3500, driver: "Ahmed K.", status: "delivered", source: "oo" },
-  { id: 1003, shipper: "Arrive Logistics", origin: "Chicago, IL", dest: "Nashville, TN", rate: 2800, driver: "Yusuf M.", status: "in-transit", source: "oo" },
-  { id: 1004, shipper: "Amazon Relay", origin: "Atlanta, GA", dest: "Miami, FL", rate: 2200, driver: "Omar S.", status: "in-transit", source: "oo" },
-  { id: 1005, shipper: "Coyote Logistics", origin: "Newark, NJ", dest: "Charlotte, NC", rate: 3100, driver: "Ibrahim R.", status: "picked-up", source: "oo" },
-];
-
-var brokerLoads = [
-  { id: 2001, shipper: "ABC Manufacturing", origin: "Dallas, TX", dest: "Memphis, TN", rate: 2400, carrierPay: 1900, carrier: "JT Trucking LLC", status: "delivered", source: "broker" },
-  { id: 2002, shipper: "Metro Supplies", origin: "Atlanta, GA", dest: "Jacksonville, FL", rate: 1800, carrierPay: 1350, carrier: "FastHaul Inc.", status: "delivered", source: "broker" },
-  { id: 2003, shipper: "Global Parts Co.", origin: "Houston, TX", dest: "San Antonio, TX", rate: 1200, carrierPay: 900, carrier: "Lone Star Freight", status: "in-transit", source: "broker" },
-  { id: 2004, shipper: "Smith Foods Inc.", origin: "Chicago, IL", dest: "Detroit, MI", rate: 1600, carrierPay: 1200, carrier: "Pending", status: "pending", source: "broker" },
-];
-
-var allLoads = ooLoads.concat(brokerLoads);
-
-var makePartners = function() { return [
-  { role: "Dispatch", color: "#2980B9", emoji: "📦", tasks: [
-    { id: "d1", text: "Find 5 loads on DAT", done: true },{ id: "d2", text: "Send rate confirmations", done: true },
-    { id: "d3", text: "Check calls on active loads", done: false },{ id: "d4", text: "Collect PODs from deliveries", done: false },
-  ]},
-  { role: "Recruiting", color: "#27AE60", emoji: "🤝", tasks: [
-    { id: "r1", text: "Post on 3 Facebook OO groups", done: true },{ id: "r2", text: "Review 4 OO applications", done: true },
-    { id: "r3", text: "Interview 2 candidates", done: false },{ id: "r4", text: "Send contractor agreement", done: false },
-  ]},
-  { role: "Sales", color: "#E67E22", emoji: "📞", tasks: [
-    { id: "s1", text: "Cold call 20 shippers", done: true },{ id: "s2", text: "Follow up with 5 leads", done: false },
-    { id: "s3", text: "Broker 2 overflow loads", done: true },{ id: "s4", text: "Email 10 logistics managers", done: false },
-  ]},
-  { role: "Compliance", color: "#8E44AD", emoji: "🛡️", tasks: [
-    { id: "c1", text: "Check OO insurance expiry dates", done: true },{ id: "c2", text: "Review drug test results", done: true },
-    { id: "c3", text: "Pull MVR reports for all drivers", done: false },{ id: "c4", text: "Check CSA impact from leased drivers", done: false },
-  ]},
-  { role: "Finance", color: "#C0392B", emoji: "💰", tasks: [
-    { id: "f1", text: "Run weekly settlements", done: true },{ id: "f2", text: "Send 3 invoices to shippers", done: true },
-    { id: "f3", text: "Reconcile factoring payments", done: false },{ id: "f4", text: "Update P&L in QuickBooks", done: false },
-  ]},
-]; };
-
-function Badge(props) {
-  return <span style={{ backgroundColor: props.color + "22", color: props.color, padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>{props.label}</span>;
+async function syncRows(table, next, prev) {
+  try {
+    if (next.length > 0) await sb.from(table).upsert(next.map(r => ({ id: String(r.id), data: r })));
+    const nextIds = new Set(next.map(r => String(r.id)));
+    const gone = (prev||[]).map(r => String(r.id)).filter(id => !nextIds.has(id));
+    if (gone.length) await sb.from(table).delete().in("id", gone);
+  } catch(e) { console.error("syncRows", table, e.message); }
 }
 
-var statusColors = { delivered: "#2ECC71", "in-transit": "#3498DB", "picked-up": "#F1C40F", pending: "#95A5A6" };
+function daysUntil(dateStr) {
+  if (!dateStr) return 999;
+  return Math.ceil((new Date(dateStr) - new Date()) / 86400000);
+}
+function daysUntilColor(d) { return d < 0 ? "#EF4444" : d <= 30 ? "#EF4444" : d <= 60 ? "#F59E0B" : "#10B981"; }
+function daysLabel(d) { return d < 0 ? Math.abs(d)+"d EXPIRED" : d === 0 ? "TODAY" : d+"d left"; }
+function statusColor(s) {
+  return { delivered:"#10B981","in-transit":"#3B82F6","picked-up":"#F59E0B",pending:"#6B7280",assigned:"#8B5CF6",invoiced:"#06B6D4",paid:"#10B981" }[s] || "#6B7280";
+}
 
+// ── shared UI ──
+function Badge({ label, color, small }) {
+  return <span style={{ background: color+"22", color, padding: small?"1px 6px":"2px 9px", borderRadius:4, fontSize:small?10:11, fontWeight:700, whiteSpace:"nowrap" }}>{label}</span>;
+}
+function Card({ children, style }) {
+  return <div style={{ background:"var(--bg-card)", borderRadius:12, border:"1px solid var(--border)", padding:16, ...style }}>{children}</div>;
+}
+function Modal({ title, onClose, children, wide }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"var(--bg-card)", border:"1px solid var(--border-hi)", borderRadius:16, padding:24, width:"100%", maxWidth:wide?720:460, maxHeight:"90vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <p style={{ fontWeight:900, fontSize:16 }}>{title}</p>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--muted)", fontSize:20 }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+function Field({ label, children }) {
+  return <div style={{ marginBottom:12 }}>
+    <label style={{ fontSize:11, color:"var(--muted)", display:"block", marginBottom:4, fontWeight:700 }}>{label}</label>
+    {children}
+  </div>;
+}
+const inp = { width:"100%", background:"var(--bg-subtle)", border:"1px solid var(--border-hi)", borderRadius:8, padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none" };
+
+// ── local storage hook ──
+function useLs(key, init) {
+  const [s, setS] = useState(() => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : init; } catch { return init; } });
+  const set = useCallback(v => setS(prev => { const next = typeof v==="function"?v(prev):v; try { localStorage.setItem(key, JSON.stringify(next)); } catch {} return next; }), [key]);
+  return [s, set];
+}
+
+// ── initial data (empty — all real data entered by user) ──
+const DRIVERS0  = [];
+const LOADS0    = [];
+const CONTACTS0 = [];
+const TASKS0 = [
+  { role:"Dispatch",   color:"#3B82F6", emoji:"📡", tasks:[] },
+  { role:"Recruiting", color:"#10B981", emoji:"🤝", tasks:[] },
+  { role:"Sales",      color:"#F59E0B", emoji:"📈", tasks:[] },
+  { role:"Compliance", color:"#8B5CF6", emoji:"🛡️", tasks:[] },
+  { role:"Finance",    color:"#EF4444", emoji:"💰", tasks:[] },
+];
+
+// ════════════════════════════════════════
+//  APP — auth gate
+// ════════════════════════════════════════
 function App() {
-  var _ps = useState("overview"); var activeTab = _ps[0]; var setActiveTab = _ps[1];
-  var _pp = useState(makePartners); var partners = _pp[0]; var setPartners = _pp[1];
-  var _sp = useState(0); var selectedPartner = _sp[0]; var setSelectedPartner = _sp[1];
-  var _nt = useState(""); var newTaskText = _nt[0]; var setNewTaskText = _nt[1];
-  var _ia = useState(false); var isAdding = _ia[0]; var setIsAdding = _ia[1];
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
-  function toggleTask(pIdx, taskId) {
-    setPartners(function(prev) {
-      return prev.map(function(p, i) {
-        if (i !== pIdx) return p;
-        return { ...p, tasks: p.tasks.map(function(t) { return t.id === taskId ? { ...t, done: !t.done } : t; }) };
-      });
-    });
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (!authReady) return (
+    <div style={{ minHeight:"100vh", background:"#030712", display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <p style={{ color:"#6B7280", fontSize:14 }}>Connecting…</p>
+    </div>
+  );
+  if (!session) return <LoginPage />;
+  return <Dashboard session={session} />;
+}
+
+// ════════════════════════════════════════
+//  LOGIN PAGE
+// ════════════════════════════════════════
+function LoginPage() {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault(); setBusy(true); setErr("");
+    const { error } = mode === "login"
+      ? await sb.auth.signInWithPassword({ email, password })
+      : await sb.auth.signUp({ email, password });
+    if (error) setErr(error.message);
+    else if (mode === "signup") setErr("✅ Check your email to confirm, then sign in.");
+    setBusy(false);
   }
-  function addNewTask() {
-    if (newTaskText.trim() === "") return;
-    var id = "t_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
-    setPartners(function(prev) {
-      return prev.map(function(p, i) {
-        if (i !== selectedPartner) return p;
-        return { ...p, tasks: p.tasks.concat([{ id: id, text: newTaskText.trim(), done: false }]) };
-      });
-    });
-    setNewTaskText(""); setIsAdding(false);
-  }
-  function deleteTask(pIdx, taskId) {
-    setPartners(function(prev) {
-      return prev.map(function(p, i) {
-        if (i !== pIdx) return p;
-        return { ...p, tasks: p.tasks.filter(function(t) { return t.id !== taskId; }) };
-      });
-    });
-  }
 
-  // Money calculations
-  var ooDelivered = ooLoads.filter(function(l) { return l.status === "delivered"; });
-  var ooGross = ooDelivered.reduce(function(s, l) { return s + l.rate; }, 0);
-  var ooOurCut = sampleOOs.reduce(function(s, o) { return s + Math.round(o.weekGross * 0.12); }, 0);
-
-  var brokerDelivered = brokerLoads.filter(function(l) { return l.status === "delivered"; });
-  var brokerGross = brokerDelivered.reduce(function(s, l) { return s + l.rate; }, 0);
-  var brokerProfit = brokerDelivered.reduce(function(s, l) { return s + l.rate - l.carrierPay; }, 0);
-
-  var totalRevenue = ooGross + brokerGross;
-  var totalProfit = ooOurCut + brokerProfit;
-
-  var cp = partners[selectedPartner];
-  var cpDone = cp.tasks.filter(function(t) { return t.done; }).length;
-
-  var tabs = [
-    { id: "overview", label: "📊 Overview" },{ id: "loads", label: "📦 Loads" },
-    { id: "drivers", label: "🚛 Drivers" },{ id: "money", label: "💰 Money" },{ id: "tasks", label: "✅ Tasks" },
-  ];
+  const iStyle = { width:"100%", background:"#1f2937", border:"1px solid #374151", color:"#e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:14, outline:"none", boxSizing:"border-box" };
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#030712", color: "white", fontFamily: "system-ui, sans-serif" }}>
-      {/* Header */}
-      <div style={{ backgroundColor: "#111827", borderBottom: "1px solid #1f2937", padding: "8px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontWeight: 900, fontSize: 14 }}>🏢 COMPANY HQ</span>
-          <div style={{ display: "flex", gap: 4 }}>
-            {tabs.map(function(t) {
-              return <button key={t.id} onClick={function() { setActiveTab(t.id); }} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer", backgroundColor: activeTab === t.id ? "#1B4F72" : "transparent", color: activeTab === t.id ? "#fff" : "#6B7280" }}>{t.label}</button>;
-            })}
-          </div>
+    <div style={{ minHeight:"100vh", background:"#030712", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ width:"100%", maxWidth:400 }}>
+        <div style={{ textAlign:"center", marginBottom:32 }}>
+          <div style={{ fontSize:48, marginBottom:8 }}>🚛</div>
+          <p style={{ color:"#e5e7eb", fontWeight:900, fontSize:22 }}>Elite Trucking Lanes</p>
+          <p style={{ color:"#6B7280", fontSize:13, marginTop:4 }}>HQ Dashboard</p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ textAlign: "right" }}>
-            <p style={{ fontSize: 11, color: "#6B7280" }}>Total Profit This Week</p>
-            <p style={{ fontSize: 16, fontWeight: 900, color: "#2ECC71" }}>${totalProfit.toLocaleString()}</p>
-          </div>
-          <div style={{ backgroundColor: "#064e3b", border: "1px solid #065f46", borderRadius: 8, padding: "4px 10px" }}>
-            <span style={{ color: "#34d399", fontSize: 14, fontWeight: 900 }}>Day 12</span>
-            <span style={{ color: "#065f46", fontSize: 11 }}> /90</span>
-          </div>
+        <div style={{ background:"#111827", border:"1px solid #1f2937", borderRadius:16, padding:28 }}>
+          <p style={{ color:"#e5e7eb", fontWeight:700, fontSize:15, marginBottom:20, textAlign:"center" }}>
+            {mode === "login" ? "Sign in to your account" : "Create an account"}
+          </p>
+          <form onSubmit={submit}>
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>EMAIL</label>
+              <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" style={iStyle} />
+            </div>
+            <div style={{ marginBottom:20 }}>
+              <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>PASSWORD</label>
+              <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={iStyle} />
+            </div>
+            {err && <p style={{ color:err.startsWith("✅")?"#10B981":"#EF4444", fontSize:12, marginBottom:14, textAlign:"center" }}>{err}</p>}
+            <button type="submit" disabled={busy}
+              style={{ width:"100%", padding:"11px 0", background:busy?"#1e3a5f":"#1d4ed8", border:"none", color:"#fff", borderRadius:8, fontWeight:700, fontSize:14, cursor:busy?"not-allowed":"pointer" }}>
+              {busy ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
+            </button>
+          </form>
+          <p style={{ textAlign:"center", marginTop:18, fontSize:12, color:"#6B7280" }}>
+            {mode === "login" ? "No account? " : "Already have one? "}
+            <span onClick={()=>{ setMode(mode==="login"?"signup":"login"); setErr(""); }}
+              style={{ color:"#3B82F6", cursor:"pointer", fontWeight:700 }}>
+              {mode === "login" ? "Sign Up" : "Sign In"}
+            </span>
+          </p>
         </div>
-      </div>
-
-      <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
-
-        {/* ─── OVERVIEW ─── */}
-        {activeTab === "overview" && <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
-            {[
-              ["🚛", "Active Drivers", sampleOOs.filter(function(o){return o.status!=="off"}).length, "#2ECC71", "drivers"],
-              ["📦", "Loads Moving", allLoads.filter(function(l){return l.status==="in-transit"||l.status==="picked-up"}).length, "#3498DB", "loads"],
-              ["💵", "From OOs (12%)", "$"+ooOurCut.toLocaleString(), "#2ECC71", "money"],
-              ["🔄", "From Brokerage", "$"+brokerProfit.toLocaleString(), "#E67E22", "money"],
-              ["📈", "Total Profit", "$"+totalProfit.toLocaleString(), "#2ECC71", "money"],
-            ].map(function(item, i) {
-              return <div key={i} onClick={function(){ setActiveTab(item[4]); }} style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12, cursor: "pointer", transition: "all 0.2s" }} onMouseEnter={function(e){ e.currentTarget.style.borderColor = item[3]; e.currentTarget.style.transform = "translateY(-2px)"; }} onMouseLeave={function(e){ e.currentTarget.style.borderColor = "#1f2937"; e.currentTarget.style.transform = "translateY(0)"; }}>
-                <p style={{ color: "#6B7280", fontSize: 11 }}>{item[0]} {item[1]}</p>
-                <p style={{ color: item[3], fontSize: 20, fontWeight: 900, marginTop: 4 }}>{item[2]}</p>
-                <p style={{ color: "#374151", fontSize: 10, marginTop: 4 }}>Click to view →</p>
-              </div>;
-            })}
-          </div>
-
-          {/* Revenue Breakdown */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 16 }}>
-              <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>💵 Where the Money Comes From</p>
-              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                <div style={{ flex: 1, backgroundColor: "#064e3b", borderRadius: 8, padding: 12, textAlign: "center" }}>
-                  <p style={{ color: "#6B7280", fontSize: 11 }}>🚛 OO Dispatch Fees</p>
-                  <p style={{ color: "#2ECC71", fontSize: 24, fontWeight: 900, marginTop: 4 }}>${ooOurCut.toLocaleString()}</p>
-                  <p style={{ color: "#065f46", fontSize: 11, marginTop: 4 }}>{sampleOOs.filter(function(o){return o.weekGross>0}).length} drivers × 12%</p>
-                </div>
-                <div style={{ flex: 1, backgroundColor: "#431407", borderRadius: 8, padding: 12, textAlign: "center" }}>
-                  <p style={{ color: "#6B7280", fontSize: 11 }}>🔄 Brokerage Margins</p>
-                  <p style={{ color: "#E67E22", fontSize: 24, fontWeight: 900, marginTop: 4 }}>${brokerProfit.toLocaleString()}</p>
-                  <p style={{ color: "#7c2d12", fontSize: 11, marginTop: 4 }}>{brokerDelivered.length} loads brokered</p>
-                </div>
-              </div>
-              <div style={{ backgroundColor: "#1f2937", borderRadius: 8, padding: 12, textAlign: "center" }}>
-                <p style={{ color: "#6B7280", fontSize: 11 }}>📈 TOTAL WEEKLY PROFIT</p>
-                <p style={{ color: "#2ECC71", fontSize: 28, fontWeight: 900, marginTop: 4 }}>${totalProfit.toLocaleString()}</p>
-                <p style={{ color: "#4B5563", fontSize: 11, marginTop: 4 }}>≈ ${(totalProfit * 4.3).toLocaleString()}/month</p>
-              </div>
-            </div>
-
-            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 16 }}>
-              <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>👥 Team Today</p>
-              {partners.map(function(p, i) {
-                var d = p.tasks.filter(function(t){return t.done}).length;
-                var pct = p.tasks.length > 0 ? (d / p.tasks.length) * 100 : 0;
-                return <div key={i} onClick={function(){ setActiveTab("tasks"); setSelectedPartner(i); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: 6, borderRadius: 8, cursor: "pointer", marginBottom: 2 }}>
-                  <span style={{ fontSize: 14 }}>{p.emoji}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: p.color, flex: 1 }}>{p.role}</span>
-                  <div style={{ width: 48, height: 6, backgroundColor: "#1f2937", borderRadius: 3 }}>
-                    <div style={{ width: pct + "%", height: 6, backgroundColor: p.color, borderRadius: 3 }} />
-                  </div>
-                  <span style={{ fontSize: 11, color: "#4B5563" }}>{d}/{p.tasks.length}</span>
-                </div>;
-              })}
-              <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid #1f2937" }}>
-                <p style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>🎯 90-Day Goal</p>
-                <div style={{ display: "flex", gap: 1 }}>
-                  {Array.from({length:90}, function(_,i) { return <div key={i} style={{ flex: 1, height: i < 12 ? 12 : 4, backgroundColor: i < 12 ? "#2ECC71" : "#1f2937", borderRadius: 1, opacity: i < 12 ? 0.5 + (i/90) : 0.3 }} />; })}
-                </div>
-                <p style={{ color: "#059669", fontSize: 11, fontWeight: 700, marginTop: 4 }}>10 OOs + brokerage + all remote</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Scaling Projections */}
-          <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 16, marginTop: 12 }}>
-            <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>🚀 What Happens When We Scale (OOs Only — 12%)</p>
-            <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 12 }}>Each OO averages $4,500/week gross. Our 12% cut per driver = $540/week = $2,340/month.</p>
-            <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
-              <thead><tr style={{ borderBottom: "2px solid #1f2937" }}>
-                <th style={{ textAlign: "left", padding: "8px 12px", color: "#6B7280", fontSize: 12 }}>Drivers</th>
-                <th style={{ textAlign: "center", padding: "8px 12px", color: "#6B7280", fontSize: 12 }}>Our Weekly Cut</th>
-                <th style={{ textAlign: "center", padding: "8px 12px", color: "#6B7280", fontSize: 12 }}>Our Monthly Cut</th>
-                <th style={{ textAlign: "center", padding: "8px 12px", color: "#6B7280", fontSize: 12 }}>Per Partner/Month</th>
-              </tr></thead>
-              <tbody>
-                {[5, 10, 15, 20].map(function(n) {
-                  var weekly = n * 540;
-                  var monthly = Math.round(weekly * 4.3);
-                  var perPartner = Math.round(monthly / 5);
-                  var isHighlight = n === 20;
-                  return <tr key={n} style={{ borderBottom: "1px solid #1f2937", backgroundColor: isHighlight ? "rgba(46,204,113,0.08)" : "transparent" }}>
-                    <td style={{ padding: "10px 12px" }}>
-                      <span style={{ fontWeight: 900, fontSize: 18 }}>{n}</span>
-                      <span style={{ color: "#6B7280", fontSize: 12, marginLeft: 6 }}>OOs</span>
-                    </td>
-                    <td style={{ textAlign: "center", padding: "10px 12px", color: "#2ECC71", fontWeight: 700 }}>${weekly.toLocaleString()}</td>
-                    <td style={{ textAlign: "center", padding: "10px 12px", color: "#2ECC71", fontWeight: 900, fontSize: 16 }}>${monthly.toLocaleString()}</td>
-                    <td style={{ textAlign: "center", padding: "10px 12px", color: isHighlight ? "#2ECC71" : "#9CA3AF", fontWeight: 700 }}>${perPartner.toLocaleString()}</td>
-                  </tr>;
-                })}
-              </tbody>
-            </table>
-            <div style={{ marginTop: 12, padding: 12, backgroundColor: "#064e3b", borderRadius: 8, textAlign: "center" }}>
-              <p style={{ color: "#6B7280", fontSize: 12 }}>And this is BEFORE brokerage. Add 3 brokered loads/day on top:</p>
-              <p style={{ color: "#E67E22", fontSize: 20, fontWeight: 900, marginTop: 4 }}>+ $33,000–$46,000/month from brokerage</p>
-              <p style={{ color: "#2ECC71", fontSize: 14, fontWeight: 700, marginTop: 8 }}>20 OOs + brokerage = $79,000–$92,000/month total</p>
-              <p style={{ color: "#4B5563", fontSize: 12, marginTop: 4 }}>= $15,800–$18,400 per partner per month</p>
-            </div>
-          </div>
-        </div>}
-        {activeTab === "loads" && <div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {/* OO Loads */}
-            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12 }}>
-              <p style={{ fontWeight: 700, marginBottom: 8 }}>🚛 OO Loads (Our Drivers)</p>
-              {ooLoads.map(function(l) {
-                return <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, borderRadius: 8, backgroundColor: "rgba(31,41,55,0.4)", marginBottom: 4 }}>
-                  <Badge label={l.status} color={statusColors[l.status]} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.origin} → {l.dest}</p>
-                    <p style={{ fontSize: 11, color: "#6B7280" }}>{l.shipper} • {l.driver}</p>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <p style={{ fontSize: 13, fontWeight: 700 }}>${l.rate.toLocaleString()}</p>
-                    <p style={{ fontSize: 11, color: "#2ECC71" }}>Our 12%: ${Math.round(l.rate * 0.12).toLocaleString()}</p>
-                  </div>
-                </div>;
-              })}
-            </div>
-
-            {/* Brokered Loads */}
-            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12 }}>
-              <p style={{ fontWeight: 700, marginBottom: 8 }}>🔄 Brokered Loads (Not Our Drivers)</p>
-              {brokerLoads.map(function(l) {
-                return <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, borderRadius: 8, backgroundColor: "rgba(31,41,55,0.4)", marginBottom: 4 }}>
-                  <Badge label={l.status} color={statusColors[l.status]} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.origin} → {l.dest}</p>
-                    <p style={{ fontSize: 11, color: "#6B7280" }}>{l.shipper} • {l.carrier}</p>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <p style={{ fontSize: 13, fontWeight: 700 }}>${l.rate.toLocaleString()}</p>
-                    <p style={{ fontSize: 11, color: "#E67E22" }}>Profit: ${(l.rate - l.carrierPay).toLocaleString()}</p>
-                  </div>
-                </div>;
-              })}
-            </div>
-          </div>
-        </div>}
-
-        {/* ─── DRIVERS ─── */}
-        {activeTab === "drivers" && <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12 }}>
-          <p style={{ fontWeight: 700, marginBottom: 12 }}>🚛 Our Drivers</p>
-          {sampleOOs.map(function(o) {
-            var mvrColor = o.mvr === "Clean" ? "#2ECC71" : o.mvr === "1 minor" ? "#F1C40F" : "#E74C3C";
-            return <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: 12, borderRadius: 12, backgroundColor: "rgba(31,41,55,0.3)", marginBottom: 8 }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", backgroundColor: "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🧑</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontWeight: 700, fontSize: 14 }}>{o.name}</span>
-                  <Badge label={o.type} color={o.type === "OO" ? "#2ECC71" : "#3498DB"} />
-                  <Badge label={o.status} color={o.status === "active" ? "#2ECC71" : o.status === "on-load" ? "#3498DB" : "#95A5A6"} />
-                </div>
-                <p style={{ color: "#6B7280", fontSize: 12 }}>{o.truck}</p>
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <p style={{ color: "#6B7280", fontSize: 10 }}>MVR</p>
-                <p style={{ fontSize: 12, fontWeight: 700, color: mvrColor }}>{o.mvr}</p>
-              </div>
-              {o.type === "Leased" && <div style={{ textAlign: "center" }}>
-                <p style={{ color: "#6B7280", fontSize: 10 }}>CSA Impact</p>
-                <p style={{ fontSize: 14, fontWeight: 900, color: o.csa <= 15 ? "#2ECC71" : o.csa <= 30 ? "#F1C40F" : "#E74C3C" }}>{o.csa}</p>
-              </div>}
-              <div style={{ textAlign: "center" }}>
-                <p style={{ color: "#6B7280", fontSize: 10 }}>Loads/wk</p>
-                <p style={{ fontSize: 16, fontWeight: 900 }}>{o.loads}</p>
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <p style={{ color: "#6B7280", fontSize: 10 }}>Gross/wk</p>
-                <p style={{ fontSize: 16, fontWeight: 900, color: "#2ECC71" }}>${o.weekGross.toLocaleString()}</p>
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <p style={{ color: "#6B7280", fontSize: 10 }}>Our 12%</p>
-                <p style={{ fontSize: 16, fontWeight: 900, color: "#2ECC71" }}>${Math.round(o.weekGross * 0.12).toLocaleString()}</p>
-              </div>
-            </div>;
-          })}
-          <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid #1f2937", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div><span style={{ color: "#6B7280", fontSize: 13 }}>{sampleOOs.filter(function(o){return o.type==="OO"}).length} OOs • {sampleOOs.filter(function(o){return o.type==="Leased"}).length} Leased</span></div>
-            <span style={{ color: "#2ECC71", fontWeight: 700 }}>Weekly cut from drivers: ${ooOurCut.toLocaleString()}</span>
-          </div>
-        </div>}
-
-        {/* ─── MONEY ─── */}
-        {activeTab === "money" && <div>
-          {/* Where Money Comes From */}
-          <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>💰 Where Our Money Comes From</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-            <div style={{ backgroundColor: "#064e3b", borderRadius: 12, border: "1px solid #065f46", padding: 16, textAlign: "center" }}>
-              <p style={{ fontSize: 32 }}>🚛</p>
-              <p style={{ color: "#6B7280", fontSize: 12, marginTop: 8 }}>From OO Dispatch Fees (12%)</p>
-              <p style={{ color: "#2ECC71", fontSize: 28, fontWeight: 900, marginTop: 8 }}>${ooOurCut.toLocaleString()}</p>
-              <p style={{ color: "#065f46", fontSize: 12, marginTop: 4 }}>{sampleOOs.filter(function(o){return o.weekGross>0}).length} drivers paying us 12%</p>
-              <p style={{ color: "#065f46", fontSize: 11, marginTop: 2 }}>≈ ${(ooOurCut * 4.3).toLocaleString()}/month</p>
-            </div>
-            <div style={{ backgroundColor: "#431407", borderRadius: 12, border: "1px solid #7c2d12", padding: 16, textAlign: "center" }}>
-              <p style={{ fontSize: 32 }}>🔄</p>
-              <p style={{ color: "#6B7280", fontSize: 12, marginTop: 8 }}>From Brokerage Margins</p>
-              <p style={{ color: "#E67E22", fontSize: 28, fontWeight: 900, marginTop: 8 }}>${brokerProfit.toLocaleString()}</p>
-              <p style={{ color: "#7c2d12", fontSize: 12, marginTop: 4 }}>{brokerDelivered.length} loads brokered this week</p>
-              <p style={{ color: "#7c2d12", fontSize: 11, marginTop: 2 }}>≈ ${(brokerProfit * 4.3).toLocaleString()}/month</p>
-            </div>
-            <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "2px solid #2ECC71", padding: 16, textAlign: "center" }}>
-              <p style={{ fontSize: 32 }}>📈</p>
-              <p style={{ color: "#6B7280", fontSize: 12, marginTop: 8 }}>TOTAL WEEKLY PROFIT</p>
-              <p style={{ color: "#2ECC71", fontSize: 28, fontWeight: 900, marginTop: 8 }}>${totalProfit.toLocaleString()}</p>
-              <p style={{ color: "#4B5563", fontSize: 12, marginTop: 4 }}>OO fees + brokerage combined</p>
-              <p style={{ color: "#2ECC71", fontSize: 13, fontWeight: 700, marginTop: 2 }}>≈ ${(totalProfit * 4.3).toLocaleString()}/month</p>
-            </div>
-          </div>
-
-          {/* OO Settlements */}
-          <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12, marginBottom: 12 }}>
-            <p style={{ fontWeight: 700, marginBottom: 8 }}>🚛 OO Settlements (What We Keep vs What They Keep)</p>
-            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-              <thead><tr style={{ color: "#6B7280", fontSize: 11, borderBottom: "1px solid #1f2937" }}>
-                <th style={{ textAlign: "left", padding: 8 }}>Driver</th><th style={{ textAlign: "left" }}>Type</th><th style={{ textAlign: "right" }}>Gross</th><th style={{ textAlign: "right" }}>Our 12%</th><th style={{ textAlign: "right" }}>They Keep (88%)</th>
-              </tr></thead>
-              <tbody>
-                {sampleOOs.filter(function(o){return o.weekGross > 0}).map(function(o) {
-                  return <tr key={o.id} style={{ borderBottom: "1px solid #1f2937" }}>
-                    <td style={{ padding: 8, fontWeight: 700 }}>{o.name}</td>
-                    <td><Badge label={o.type} color={o.type === "OO" ? "#2ECC71" : "#3498DB"} /></td>
-                    <td style={{ textAlign: "right" }}>${o.weekGross.toLocaleString()}</td>
-                    <td style={{ textAlign: "right", color: "#2ECC71", fontWeight: 700 }}>${Math.round(o.weekGross * 0.12).toLocaleString()}</td>
-                    <td style={{ textAlign: "right", color: "#9CA3AF" }}>${Math.round(o.weekGross * 0.88).toLocaleString()}</td>
-                  </tr>;
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Brokerage Breakdown */}
-          <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 12 }}>
-            <p style={{ fontWeight: 700, marginBottom: 8 }}>🔄 Brokerage Breakdown (What Shipper Pays vs What Carrier Gets)</p>
-            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-              <thead><tr style={{ color: "#6B7280", fontSize: 11, borderBottom: "1px solid #1f2937" }}>
-                <th style={{ textAlign: "left", padding: 8 }}>Shipper</th><th style={{ textAlign: "left" }}>Route</th><th style={{ textAlign: "right" }}>Shipper Pays</th><th style={{ textAlign: "right" }}>Carrier Gets</th><th style={{ textAlign: "right" }}>We Keep</th>
-              </tr></thead>
-              <tbody>
-                {brokerLoads.filter(function(l){return l.status === "delivered"}).map(function(l) {
-                  return <tr key={l.id} style={{ borderBottom: "1px solid #1f2937" }}>
-                    <td style={{ padding: 8, fontWeight: 700 }}>{l.shipper}</td>
-                    <td style={{ color: "#9CA3AF", fontSize: 12 }}>{l.origin} → {l.dest}</td>
-                    <td style={{ textAlign: "right" }}>${l.rate.toLocaleString()}</td>
-                    <td style={{ textAlign: "right", color: "#9CA3AF" }}>${l.carrierPay.toLocaleString()}</td>
-                    <td style={{ textAlign: "right", color: "#E67E22", fontWeight: 700 }}>${(l.rate - l.carrierPay).toLocaleString()}</td>
-                  </tr>;
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>}
-
-        {/* ─── TASKS ─── */}
-        {activeTab === "tasks" && <div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-            {partners.map(function(p, i) {
-              var d = p.tasks.filter(function(t){return t.done}).length;
-              var pct = p.tasks.length > 0 ? (d / p.tasks.length) * 100 : 0;
-              var isSel = i === selectedPartner;
-              return <button key={i} onClick={function(){ setSelectedPartner(i); }} style={{ flex: 1, borderRadius: 12, padding: 10, border: isSel ? "2px solid "+p.color : "1px solid #1f2937", backgroundColor: isSel ? p.color+"18" : "#111827", cursor: "pointer", textAlign: "left" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontSize: 14 }}>{p.emoji}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: isSel ? p.color : "#6B7280" }}>{p.role}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
-                  <div style={{ flex: 1, height: 6, backgroundColor: "#1f2937", borderRadius: 3 }}>
-                    <div style={{ width: pct+"%", height: 6, backgroundColor: p.color, borderRadius: 3, transition: "width 0.3s" }} />
-                  </div>
-                  <span style={{ fontSize: 11, color: "#4B5563" }}>{d}/{p.tasks.length}</span>
-                </div>
-              </button>;
-            })}
-          </div>
-
-          <div style={{ backgroundColor: "#111827", borderRadius: 12, border: "1px solid #1f2937", padding: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 24 }}>{cp.emoji}</span>
-                <div>
-                  <p style={{ fontWeight: 900, color: cp.color }}>{cp.role}</p>
-                  <p style={{ fontSize: 12, color: "#6B7280" }}>Partner {selectedPartner + 1} — Click tasks to complete</p>
-                </div>
-              </div>
-              <span style={{ fontSize: 28, fontWeight: 900, color: cp.color }}>{cpDone}/{cp.tasks.length}</span>
-            </div>
-
-            {cp.tasks.map(function(task) {
-              return <div key={task.id} onClick={function() { toggleTask(selectedPartner, task.id); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, borderRadius: 8, cursor: "pointer", marginBottom: 4 }} onMouseEnter={function(e){e.currentTarget.style.backgroundColor="#1f2937"}} onMouseLeave={function(e){e.currentTarget.style.backgroundColor="transparent"}}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, border: "2px solid "+(task.done ? cp.color : "#374151"), backgroundColor: task.done ? cp.color : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  {task.done && <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>✓</span>}
-                </div>
-                <span style={{ flex: 1, fontSize: 14, color: task.done ? "#4B5563" : "#e5e7eb", textDecoration: task.done ? "line-through" : "none" }}>{task.text}</span>
-                <button onClick={function(e) { e.stopPropagation(); deleteTask(selectedPartner, task.id); }} style={{ opacity: 0.3, border: "none", background: "none", color: "#6B7280", fontSize: 14, cursor: "pointer", padding: 4 }} onMouseEnter={function(e){e.target.style.opacity=1;e.target.style.color="#EF4444"}} onMouseLeave={function(e){e.target.style.opacity=0.3;e.target.style.color="#6B7280"}}>✕</button>
-              </div>;
-            })}
-
-            {isAdding ? (
-              <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                <input value={newTaskText} onChange={function(e){setNewTaskText(e.target.value)}} onKeyDown={function(e){if(e.key==="Enter")addNewTask()}} placeholder="Type task, press Enter..." autoFocus style={{ flex: 1, backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8, padding: "8px 12px", fontSize: 14, color: "#fff", outline: "none" }} />
-                <button onClick={addNewTask} style={{ backgroundColor: "#374151", border: "none", color: "#fff", fontSize: 13, padding: "8px 16px", borderRadius: 8, cursor: "pointer" }}>Add</button>
-                <button onClick={function(){setIsAdding(false);setNewTaskText("")}} style={{ background: "none", border: "none", color: "#6B7280", fontSize: 14, cursor: "pointer", padding: "0 8px" }}>✕</button>
-              </div>
-            ) : (
-              <button onClick={function(){setIsAdding(true)}} style={{ marginTop: 8, width: "100%", padding: 10, border: "1px dashed #1f2937", borderRadius: 8, backgroundColor: "transparent", color: "#4B5563", fontSize: 13, cursor: "pointer" }} onMouseEnter={function(e){e.target.style.borderColor="#4B5563";e.target.style.color="#9CA3AF"}} onMouseLeave={function(e){e.target.style.borderColor="#1f2937";e.target.style.color="#4B5563"}}>+ Add Task</button>
-            )}
-          </div>
-        </div>}
-
       </div>
     </div>
   );
 }
 
+// ════════════════════════════════════════
+//  DASHBOARD
+// ════════════════════════════════════════
+function Dashboard({ session }) {
+  const [tab, setTab] = useState("overview");
+  const [drivers,     _setDrivers]     = useState([]);
+  const [loads,       _setLoads]       = useState([]);
+  const [tasks,       _setTasks]       = useState(TASKS0);
+  const [contacts,    _setContacts]    = useState([]);
+  const [brokerLoads,    _setBrokerLoads]    = useState([]);
+  const [priorityTasks,  _setPriorityTasks]  = useState([]);
+  const [theme, setTheme] = useLs("etl_theme", "dark");
+  const [dbReady, setDbReady] = useState(false);
+  const isDark = theme === "dark";
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+  // ── Initial load ──────────────────────
+  useEffect(() => {
+    (async () => {
+      const [dr, lo, bl, co, st, pt] = await Promise.all([
+        sb.from("drivers").select("*"),
+        sb.from("loads").select("*"),
+        sb.from("broker_loads").select("*"),
+        sb.from("contacts").select("*"),
+        sb.from("app_settings").select("*").eq("key","tasks").maybeSingle(),
+        sb.from("app_settings").select("*").eq("key","priority_tasks").maybeSingle(),
+      ]);
+      _setDrivers(    (dr.data||[]).map(r=>r.data));
+      _setLoads(      (lo.data||[]).map(r=>r.data));
+      _setBrokerLoads((bl.data||[]).map(r=>r.data));
+      _setContacts(   (co.data||[]).map(r=>r.data));
+      if (st.data?.value) _setTasks(st.data.value);
+      if (pt.data?.value) _setPriorityTasks(pt.data.value);
+      setDbReady(true);
+    })();
+  }, []);
+
+  // ── Realtime sync ─────────────────────
+  useEffect(() => {
+    const pull = (table, setter) => async () => {
+      const { data } = await sb.from(table).select("*");
+      if (data) setter(data.map(r=>r.data));
+    };
+    const pullTasks = async () => {
+      const [st, pt] = await Promise.all([
+        sb.from("app_settings").select("*").eq("key","tasks").maybeSingle(),
+        sb.from("app_settings").select("*").eq("key","priority_tasks").maybeSingle(),
+      ]);
+      if (st.data?.value) _setTasks(st.data.value);
+      if (pt.data?.value) _setPriorityTasks(pt.data.value);
+    };
+    const ch = sb.channel("realtime-all")
+      .on("postgres_changes",{event:"*",schema:"public",table:"drivers"},      pull("drivers",     _setDrivers))
+      .on("postgres_changes",{event:"*",schema:"public",table:"loads"},         pull("loads",       _setLoads))
+      .on("postgres_changes",{event:"*",schema:"public",table:"broker_loads"},  pull("broker_loads",_setBrokerLoads))
+      .on("postgres_changes",{event:"*",schema:"public",table:"contacts"},      pull("contacts",    _setContacts))
+      .on("postgres_changes",{event:"*",schema:"public",table:"app_settings"},  pullTasks)
+      .subscribe();
+    return () => sb.removeChannel(ch);
+  }, []);
+
+  // ── Supabase-synced setters ───────────
+  function makeSynced(table, localSetter) {
+    return fn => localSetter(prev => {
+      const next = typeof fn==="function" ? fn(prev) : fn;
+      syncRows(table, next, prev);
+      return next;
+    });
+  }
+  const setDrivers     = makeSynced("drivers",     _setDrivers);
+  const setLoads       = makeSynced("loads",        _setLoads);
+  const setBrokerLoads = makeSynced("broker_loads", _setBrokerLoads);
+  const setContacts    = makeSynced("contacts",     _setContacts);
+  function setTasks(fn) {
+    _setTasks(prev => {
+      const next = typeof fn==="function" ? fn(prev) : fn;
+      sb.from("app_settings").upsert({ key:"tasks", value: next });
+      return next;
+    });
+  }
+  function setPriorityTasks(fn) {
+    _setPriorityTasks(prev => {
+      const next = typeof fn==="function" ? fn(prev) : fn;
+      sb.from("app_settings").upsert({ key:"priority_tasks", value: next });
+      return next;
+    });
+  }
+
+  // ── Computed values ───────────────────
+  const ooFees = drivers.reduce((s,d) => s + Math.round(d.weekGross * 0.12), 0);
+  const brokerDelivered = loads.filter(l => l.type==="broker" && l.status==="delivered");
+  const brokerProfit = brokerDelivered.reduce((s,l) => s + l.rate - l.carrierPay, 0)
+                     + brokerLoads.reduce((s,l) => s + (Number(l.loadRate)||0) - (Number(l.carrierRate)||0), 0);
+  const totalProfit = ooFees + brokerProfit;
+  const unpaidAR = loads.filter(l => l.invoiced && !l.paid).reduce((s,l) => s + l.rate, 0);
+
+  const alerts = [];
+  drivers.forEach(d => {
+    const checks = [
+      { type:"CDL",          days: daysUntil(d.cdlExpiry) },
+      { type:"Med Card",     days: daysUntil(d.medCardExpiry) },
+      { type:"Insurance",    days: daysUntil(d.insuranceExpiry) },
+      { type:"Inspection",   days: daysUntil(d.inspectionExpiry) },
+      { type:"Registration", days: daysUntil(d.registrationExpiry) },
+    ];
+    checks.forEach(({ type, days }) => {
+      if (days <= 60) alerts.push({ driver:d.name, type, days, sev: days<=30?"red":"yellow" });
+    });
+    if (d.csa >= 65) alerts.push({ driver:d.name, type:"CSA", days:null, sev:"red", note:`Score: ${d.csa}` });
+  });
+  const redAlerts = alerts.filter(a => a.sev==="red");
+
+  const TABS = [
+    { id:"overview",    label:"🏠 Overview" },
+    { id:"operations",  label:"📡 Operations" },
+    { id:"people",      label:"👥 People" },
+    { id:"finance",     label:"💰 Finance" },
+    { id:"tasks",       label:"✅ Tasks" },
+  ];
+
+  if (!dbReady) return (
+    <div data-theme={theme} style={{ minHeight:"100vh", background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:12 }}>
+      <div style={{ fontSize:32 }}>🚛</div>
+      <p style={{ color:"var(--muted)", fontSize:14 }}>Loading data…</p>
+    </div>
+  );
+
+  return (
+    <div data-theme={theme} style={{ minHeight:"100vh", background:"var(--bg)", color:"var(--text)", fontFamily:"system-ui,sans-serif" }}>
+      {/* NAV */}
+      <div style={{ background:"var(--bg-nav)", borderBottom:"1px solid var(--border)", padding:"0 16px", position:"sticky", top:0, zIndex:100 }}>
+        <div style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", gap:12, height:52 }}>
+          <div className="nav-brand" style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+            <span style={{ fontSize:22 }}>🚛</span>
+            <div>
+              <p style={{ fontWeight:900, fontSize:13, lineHeight:1 }}>ELITE TRUCKING</p>
+              <p style={{ fontSize:9, color:"var(--dim)", letterSpacing:2 }}>LANES HQ</p>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:2, flex:1, overflowX:"auto" }}>
+            {TABS.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ padding:"6px 11px", borderRadius:8, fontSize:12, fontWeight:700, border:"none", whiteSpace:"nowrap", background: tab===t.id?"#1d4ed8":"transparent", color: tab===t.id?"#fff":"var(--muted)" }}>{t.label}</button>
+            ))}
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+            {redAlerts.length > 0 && (
+              <div onClick={() => setTab("finance")} className="hide-mobile" style={{ background:"#7f1d1d", border:"1px solid #991b1b", borderRadius:8, padding:"3px 10px", cursor:"pointer" }}>
+                <span style={{ color:"#fca5a5", fontSize:12, fontWeight:700 }}>⚠️ {redAlerts.length}</span>
+              </div>
+            )}
+            <div className="hide-mobile" style={{ textAlign:"right" }}>
+              <p style={{ fontSize:10, color:"var(--muted)" }}>Profit/Wk</p>
+              <p style={{ fontSize:15, fontWeight:900, color:"#10B981" }}>${totalProfit.toLocaleString()}</p>
+            </div>
+            <div className="hide-mobile" style={{ maxWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              <p style={{ fontSize:10, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis" }}>{session.user.email}</p>
+            </div>
+            <button onClick={toggleTheme} title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              style={{ width:36, height:36, borderRadius:8, border:"1px solid var(--border-hi)", background:"var(--bg-subtle)", color:"var(--text)", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              {isDark ? "☀️" : "🌙"}
+            </button>
+            <button onClick={() => sb.auth.signOut()}
+              style={{ padding:"6px 12px", background:"var(--bg-subtle)", border:"1px solid var(--border-hi)", color:"var(--muted)", borderRadius:8, fontSize:11, fontWeight:700, flexShrink:0 }}>
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* RED ALERT BAR */}
+      {redAlerts.length > 0 && (
+        <div style={{ background:"#7f1d1d", borderBottom:"1px solid #991b1b", padding:"5px 16px" }}>
+          <div style={{ maxWidth:1200, margin:"0 auto", display:"flex", gap:16, flexWrap:"wrap" }}>
+            {redAlerts.map((a,i) => (
+              <span key={i} style={{ fontSize:11, color:"#fca5a5" }}>
+                🔴 <strong>{a.driver}</strong> — {a.type}: {a.days!=null ? daysLabel(a.days) : a.note}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ maxWidth:1200, margin:"0 auto", padding:16 }}>
+        {tab==="overview"   && <OverviewTab          drivers={drivers} loads={loads} tasks={tasks} ooFees={ooFees} brokerProfit={brokerProfit} totalProfit={totalProfit} unpaidAR={unpaidAR} alerts={alerts} setTab={setTab} priorityTasks={priorityTasks} setPriorityTasks={setPriorityTasks} />}
+        {tab==="operations" && <OperationsTab        loads={loads} setLoads={setLoads} drivers={drivers} />}
+        {tab==="people"     && <PeopleTab            drivers={drivers} setDrivers={setDrivers} contacts={contacts} setContacts={setContacts} />}
+        {tab==="finance"    && <FinanceComplianceTab loads={loads} setLoads={setLoads} drivers={drivers} ooFees={ooFees} brokerProfit={brokerProfit} totalProfit={totalProfit} brokerLoads={brokerLoads} setBrokerLoads={setBrokerLoads} alerts={alerts} />}
+        {tab==="tasks"      && <TasksTab             tasks={tasks} setTasks={setTasks} />}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  OVERVIEW
+// ════════════════════════════════════════
+function OverviewTab({ drivers, loads, tasks, ooFees, brokerProfit, totalProfit, unpaidAR, alerts, setTab, priorityTasks, setPriorityTasks }) {
+  const moving = loads.filter(l => ["in-transit","picked-up","assigned"].includes(l.status));
+
+  const activeOOs   = drivers.filter(d => d.onboardingStatus==="active" || d.status==="available" || d.status==="on-load");
+  const totalGross  = drivers.reduce((s,d) => s + (Number(d.weekGross)||0), 0);
+  const totalCut    = drivers.reduce((s,d) => s + Math.round((Number(d.weekGross)||0)*0.12), 0);
+  const inPipeline  = drivers.filter(d => d.onboardingStatus==="lead" || d.onboardingStatus==="documents-pending").length;
+
+  const kpis = [
+    { icon:"🚛", label:"Fleet Size",         value: drivers.filter(d=>d.onboardingStatus==="active"||(!d.onboardingStatus&&d.status!=="inactive")).length, color:"#10B981", tab:"people" },
+    { icon:"🔄", label:"In Pipeline",        value: inPipeline, color:"#3B82F6", tab:"people" },
+    { icon:"📦", label:"Loads Moving",       value: moving.length, color:"#8B5CF6", tab:"operations" },
+    { icon:"💵", label:"Fleet Gross/Wk",     value:"$"+totalGross.toLocaleString(), color:"#10B981", tab:"finance" },
+    { icon:"✂️", label:"Your 12% Cut/Wk",    value:"$"+totalCut.toLocaleString(), color:"#F59E0B", tab:"finance" },
+    { icon:"📈", label:"Brokerage Profit",   value:"$"+brokerProfit.toLocaleString(), color:"#F59E0B", tab:"finance" },
+    { icon:"🏦", label:"Unpaid Invoices",    value:"$"+unpaidAR.toLocaleString(), color:"#EF4444", tab:"finance" },
+    { icon:"✅", label:"Total Profit/Wk",    value:"$"+totalProfit.toLocaleString(), color:"#10B981", tab:"finance" },
+  ];
+
+  if (drivers.length === 0) return (
+    <div style={{ maxWidth:560, margin:"60px auto", textAlign:"center" }}>
+      <p style={{ fontSize:48, marginBottom:16 }}>🚛</p>
+      <p style={{ fontWeight:900, fontSize:22, marginBottom:8 }}>Welcome to Elite Trucking Lanes HQ</p>
+      <p style={{ color:"var(--muted)", fontSize:14, marginBottom:32, lineHeight:1.6 }}>No data yet. Start by adding your first driver — once you have drivers and loads entered, this dashboard will show your live numbers.</p>
+      <div className="grid-3col" style={{ gap:12, marginBottom:32 }}>
+        {[
+          { step:"1", label:"Add your driver", desc:"Name, truck, CDL, compliance docs", tab:"people", color:"#3B82F6" },
+          { step:"2", label:"Log your loads", desc:"Routes, rates, shipper info", tab:"operations", color:"#10B981" },
+          { step:"3", label:"Track finances", desc:"Settlements, invoices, A/R", tab:"finance", color:"#F59E0B" },
+        ].map(s => (
+          <div key={s.step} onClick={() => setTab(s.tab)} style={{ background:"var(--bg-card)", border:`1px solid ${s.color}44`, borderRadius:12, padding:16, cursor:"pointer" }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = s.color}
+            onMouseLeave={e => e.currentTarget.style.borderColor = s.color+"44"}>
+            <div style={{ width:28, height:28, borderRadius:"50%", background:s.color+"22", color:s.color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:14, margin:"0 auto 8px" }}>{s.step}</div>
+            <p style={{ fontWeight:700, fontSize:13, marginBottom:4 }}>{s.label}</p>
+            <p style={{ color:"var(--muted)", fontSize:11 }}>{s.desc}</p>
+          </div>
+        ))}
+      </div>
+      <button onClick={() => setTab("people")} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"12px 28px", borderRadius:10, fontWeight:700, fontSize:15 }}>+ Add Your First Driver →</button>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="grid-kpi-top" style={{ marginBottom:8 }}>
+        {kpis.slice(0,4).map((k,i) => (
+          <div key={i} onClick={() => setTab(k.tab)} style={{ background:"var(--bg-card)", borderRadius:12, border:"1px solid var(--border)", padding:12, cursor:"pointer" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor=k.color; e.currentTarget.style.transform="translateY(-2px)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor="var(--border)"; e.currentTarget.style.transform="translateY(0)"; }}>
+            <p style={{ fontSize:20, marginBottom:4 }}>{k.icon}</p>
+            <p style={{ color:"var(--muted)", fontSize:10 }}>{k.label}</p>
+            <p style={{ color:k.color, fontSize:20, fontWeight:900, marginTop:2 }}>{k.value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid-kpi-bottom" style={{ marginBottom:16 }}>
+        {kpis.slice(4).map((k,i) => (
+          <div key={i} onClick={() => setTab(k.tab)} style={{ background:"var(--bg-card)", borderRadius:12, border:"1px solid var(--border)", padding:12, cursor:"pointer" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor=k.color; e.currentTarget.style.transform="translateY(-2px)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor="var(--border)"; e.currentTarget.style.transform="translateY(0)"; }}>
+            <p style={{ fontSize:20, marginBottom:4 }}>{k.icon}</p>
+            <p style={{ color:"var(--muted)", fontSize:10 }}>{k.label}</p>
+            <p style={{ color:k.color, fontSize:20, fontWeight:900, marginTop:2 }}>{k.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Priority Tasks (left) + Revenue & Loads (right) ── */}
+      <div className="grid-2col" style={{ marginBottom:16, alignItems:"start" }}>
+        <TaskPriorityPanel
+          priorityTasks={priorityTasks}
+          setPriorityTasks={setPriorityTasks}
+          tasks={tasks}
+          tiersOnly={["urgent","asap"]}
+        />
+        <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+          <Card>
+            <p style={{ fontWeight:700, marginBottom:10 }}>💰 This Week's Revenue</p>
+            <div className="grid-2col" style={{ gap:8, marginBottom:8 }}>
+              <div style={{ background:"#064e3b", borderRadius:8, padding:10, textAlign:"center" }}>
+                <p style={{ color:"var(--muted)", fontSize:10 }}>OO Dispatch Fees</p>
+                <p style={{ color:"#10B981", fontSize:22, fontWeight:900 }}>${ooFees.toLocaleString()}</p>
+                <p style={{ color:"#065f46", fontSize:10 }}>{drivers.filter(d=>d.weekGross>0).length} drivers × 12%</p>
+              </div>
+              <div style={{ background:"#431407", borderRadius:8, padding:10, textAlign:"center" }}>
+                <p style={{ color:"var(--muted)", fontSize:10 }}>Brokerage Margins</p>
+                <p style={{ color:"#F59E0B", fontSize:22, fontWeight:900 }}>${brokerProfit.toLocaleString()}</p>
+                <p style={{ color:"#7c2d12", fontSize:10 }}>{loads.filter(l=>l.type==="broker"&&l.status==="delivered").length} loads brokered</p>
+              </div>
+            </div>
+            <div style={{ background:"var(--bg-subtle)", borderRadius:8, padding:10, textAlign:"center" }}>
+              <p style={{ color:"var(--muted)", fontSize:10 }}>TOTAL WEEKLY PROFIT</p>
+              <p style={{ color:"#10B981", fontSize:28, fontWeight:900 }}>${totalProfit.toLocaleString()}</p>
+              <p style={{ color:"var(--dim)", fontSize:10, marginTop:2 }}>≈ ${(totalProfit*4.3).toLocaleString()}/mo · ${Math.round(totalProfit/5).toLocaleString()} per partner</p>
+            </div>
+          </Card>
+          <Card>
+            <p style={{ fontWeight:700, marginBottom:10 }}>🚛 Active Loads</p>
+            {moving.length === 0 && <p style={{ color:"var(--muted)", fontSize:13 }}>No active loads right now.</p>}
+            {moving.map(l => (
+              <div key={l.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid var(--border)" }}>
+                <Badge label={l.status} color={statusColor(l.status)} small />
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.origin} → {l.dest}</p>
+                  <p style={{ fontSize:11, color:"var(--muted)" }}>{l.type==="oo" ? l.driver : (l.carrier||"Carrier TBD")}</p>
+                </div>
+                <p style={{ fontSize:13, fontWeight:700, color:"#10B981" }}>${l.rate.toLocaleString()}</p>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </div>
+
+      <div className="grid-2col" style={{ marginBottom:16 }}>
+        <Card>
+          <p style={{ fontWeight:700, marginBottom:10 }}>🧑‍💼 Team Progress Today</p>
+          {tasks.map((p,i) => {
+            const done = p.tasks.filter(t=>t.done).length;
+            const pct = p.tasks.length ? (done/p.tasks.length)*100 : 0;
+            return (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:7 }}>
+                <span style={{ fontSize:14 }}>{p.emoji}</span>
+                <span style={{ fontSize:12, fontWeight:700, color:p.color, width:90 }}>{p.role}</span>
+                <div style={{ flex:1, height:8, background:"var(--bg-subtle)", borderRadius:4 }}>
+                  <div style={{ width:pct+"%", height:8, background:p.color, borderRadius:4 }} />
+                </div>
+                <span style={{ fontSize:11, color:"var(--muted)", width:30, textAlign:"right" }}>{done}/{p.tasks.length}</span>
+              </div>
+            );
+          })}
+        </Card>
+
+        <Card>
+          <p style={{ fontWeight:700, marginBottom:10 }}>⚠️ Compliance Alerts</p>
+          {alerts.length===0 && <p style={{ color:"#10B981", fontSize:13 }}>✅ All clear — no expiring docs</p>}
+          {alerts.slice(0,6).map((a,i) => (
+            <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
+              <span>{a.sev==="red"?"🔴":"🟡"}</span>
+              <div style={{ flex:1 }}>
+                <p style={{ fontSize:12, fontWeight:700 }}>{a.driver}</p>
+                <p style={{ fontSize:11, color:"var(--muted)" }}>{a.type}</p>
+              </div>
+              <span style={{ fontSize:11, fontWeight:700, color: a.sev==="red"?"#EF4444":"#F59E0B" }}>
+                {a.days!=null ? daysLabel(a.days) : a.note}
+              </span>
+            </div>
+          ))}
+        </Card>
+      </div>
+
+      {/* Growth projections */}
+      <Card>
+        <p style={{ fontWeight:700, marginBottom:4 }}>📊 Growth Projections (OO @ $4,500/wk avg · 12% cut)</p>
+        <p style={{ color:"var(--muted)", fontSize:12, marginBottom:12 }}>Current: {drivers.filter(d=>d.status!=="inactive").length} active drivers. 90-day goal: 20 OOs + brokerage.</p>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ borderBottom:"2px solid #1f2937" }}>
+              {["Drivers","Weekly OO Fees","Monthly OO Fees","Per Partner","+ Brokerage/Mo","Per Partner (Full)"].map(h=>(
+                <th key={h} style={{ padding:"6px 10px", color:"var(--muted)", fontSize:11, textAlign: h==="Drivers"?"left":"center" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[5,10,15,20].map(n => {
+              const wk = n*540, mo = Math.round(wk*4.3), pp = Math.round(mo/5);
+              const full = mo+39000, ppf = Math.round(full/5);
+              const isNow = n <= drivers.filter(d=>d.status!=="inactive").length && (n+5) > drivers.filter(d=>d.status!=="inactive").length;
+              return (
+                <tr key={n} style={{ borderBottom:"1px solid var(--border)", background: n===20?"rgba(16,185,129,0.06)": isNow?"rgba(59,130,246,0.06)":"transparent" }}>
+                  <td style={{ padding:"10px 10px", fontWeight:900 }}>{n} OOs {isNow&&<span style={{ fontSize:10, color:"#3B82F6", marginLeft:4 }}>← now</span>}</td>
+                  <td style={{ textAlign:"center", color:"#10B981", fontWeight:700 }}>${wk.toLocaleString()}</td>
+                  <td style={{ textAlign:"center", color:"#10B981", fontWeight:900, fontSize:15 }}>${mo.toLocaleString()}</td>
+                  <td style={{ textAlign:"center", color:"#9CA3AF" }}>${pp.toLocaleString()}</td>
+                  <td style={{ textAlign:"center", color:"#F59E0B", fontWeight:700 }}>${full.toLocaleString()}</td>
+                  <td style={{ textAlign:"center", color: n===20?"#10B981":"#9CA3AF", fontWeight: n===20?900:400 }}>${ppf.toLocaleString()}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  DISPATCH (Kanban)
+// ════════════════════════════════════════
+function DispatchTab({ loads, setLoads, drivers }) {
+  const [showAdd, setShowAdd] = useState(false);
+
+  const COLS = [
+    { key:"pending",    label:"📋 Pending",    color:"var(--muted)" },
+    { key:"assigned",   label:"🔵 Assigned",   color:"#8B5CF6" },
+    { key:"picked-up",  label:"🟡 Picked Up",  color:"#F59E0B" },
+    { key:"in-transit", label:"🚛 In Transit",  color:"#3B82F6" },
+    { key:"delivered",  label:"✅ Delivered",  color:"#10B981" },
+  ];
+
+  function advance(id, curKey) {
+    const idx = COLS.findIndex(c => c.key===curKey);
+    if (idx < COLS.length-1) setLoads(prev => prev.map(l => l.id===id ? { ...l, status:COLS[idx+1].key } : l));
+  }
+
+  const avail = drivers.filter(d => d.status==="available");
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div>
+          <p style={{ fontWeight:900, fontSize:16 }}>📡 Dispatch Board</p>
+          <p style={{ color:"var(--muted)", fontSize:12 }}>{avail.length} available · {loads.filter(l=>["in-transit","picked-up"].includes(l.status)).length} loads moving</p>
+        </div>
+        <button onClick={() => setShowAdd(true)} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"8px 16px", borderRadius:8, fontWeight:700, fontSize:13 }}>+ Add Load</button>
+      </div>
+
+      {avail.length > 0 && (
+        <div style={{ background:"#064e3b", border:"1px solid #065f46", borderRadius:10, padding:"8px 12px", marginBottom:12, display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+          <span style={{ fontSize:12, color:"#34d399", fontWeight:700 }}>Available Now:</span>
+          {avail.map(d => (
+            <span key={d.id} style={{ background:"#065f46", color:"#6ee7b7", padding:"2px 10px", borderRadius:20, fontSize:12, fontWeight:700 }}>{d.name} · {d.truck.split(' ').slice(0,2).join(' ')}</span>
+          ))}
+        </div>
+      )}
+
+      <div className="kanban-5" style={{ overflowX:"auto" }}>
+        {COLS.map(col => {
+          const colLoads = loads.filter(l => l.status===col.key);
+          return (
+            <div key={col.key} style={{ background:"var(--bg-nav)", borderRadius:10, border:"1px solid var(--border)", padding:10, minHeight:200 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                <p style={{ fontSize:12, fontWeight:700, color:col.color }}>{col.label}</p>
+                <span style={{ background:col.color+"22", color:col.color, borderRadius:20, padding:"1px 8px", fontSize:11, fontWeight:700 }}>{colLoads.length}</span>
+              </div>
+              {colLoads.map(l => (
+                <div key={l.id} style={{ background:"var(--bg-card)", borderRadius:8, border:"1px solid var(--border)", padding:10, marginBottom:6 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
+                    <Badge label={l.type==="oo"?"OO":"Broker"} color={l.type==="oo"?"#10B981":"#F59E0B"} small />
+                    <span style={{ fontSize:13, fontWeight:900, color:"#10B981" }}>${l.rate.toLocaleString()}</span>
+                  </div>
+                  <p style={{ fontSize:12, fontWeight:700 }}>{l.origin}</p>
+                  <p style={{ fontSize:11, color:"var(--muted)" }}>→ {l.dest}</p>
+                  <p style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>{l.shipper}</p>
+                  <p style={{ fontSize:11, color:"var(--muted)", marginTop:2 }}>{l.type==="oo"?(l.driver||"Unassigned"):(l.carrier||"Carrier TBD")}</p>
+                  {l.pickupDate && <p style={{ fontSize:10, color:"var(--dim)", marginTop:3 }}>📅 {l.pickupDate}</p>}
+                  {col.key!=="delivered" && (
+                    <button onClick={() => advance(l.id, col.key)} style={{ marginTop:8, width:"100%", fontSize:11, padding:"4px", background:"var(--bg-subtle)", border:"none", color:"#9CA3AF", borderRadius:6, fontWeight:700 }}>
+                      Advance →
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      {showAdd && <LoadModal onClose={() => setShowAdd(false)} setLoads={setLoads} drivers={drivers} />}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  LOAD MODAL (add / edit)
+// ════════════════════════════════════════
+function LoadModal({ onClose, setLoads, drivers, existing }) {
+  const [f, setF] = useState(existing || {
+    type:"oo", shipper:"", shipperContact:"", origin:"", dest:"",
+    pickupDate:"", deliveryDate:"", rate:"", driver:"", driverId:null,
+    carrier:"", carrierPay:"", status:"pending",
+    commodity:"General Freight", weight:"", miles:"", poNumber:"", notes:""
+  });
+  const s = (k,v) => setF(p => ({ ...p, [k]:v }));
+
+  function save() {
+    if (!f.shipper||!f.origin||!f.dest||!f.rate) return alert("Fill required fields (Shipper, Origin, Dest, Rate)");
+    const load = { ...f, id: existing?existing.id:Date.now(), rate:+f.rate||0, carrierPay:+f.carrierPay||0, miles:+f.miles||0, invoiced:existing?.invoiced||false, paid:existing?.paid||false };
+    if (existing) setLoads(prev => prev.map(l => l.id===load.id?load:l));
+    else setLoads(prev => [...prev, load]);
+    onClose();
+  }
+
+  const broker = f.type==="broker";
+  const margin = broker && f.rate && f.carrierPay ? +f.rate - +f.carrierPay : null;
+
+  return (
+    <Modal title={existing?"Edit Load":"Add New Load"} onClose={onClose} wide>
+      <div className="form-grid">
+        <Field label="Load Type *">
+          <select style={inp} value={f.type} onChange={e => s("type",e.target.value)}>
+            <option value="oo">OO Load (Our Driver)</option>
+            <option value="broker">Brokered Load (3rd Party)</option>
+          </select>
+        </Field>
+        <Field label="Status">
+          <select style={inp} value={f.status} onChange={e => s("status",e.target.value)}>
+            {["pending","assigned","picked-up","in-transit","delivered"].map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </Field>
+        <Field label="Shipper *"><input style={inp} value={f.shipper} onChange={e=>s("shipper",e.target.value)} placeholder="Amazon Relay" /></Field>
+        <Field label="Shipper Contact"><input style={inp} value={f.shipperContact} onChange={e=>s("shipperContact",e.target.value)} placeholder="800-555-0000" /></Field>
+        <Field label="Origin *"><input style={inp} value={f.origin} onChange={e=>s("origin",e.target.value)} placeholder="Houston, TX" /></Field>
+        <Field label="Destination *"><input style={inp} value={f.dest} onChange={e=>s("dest",e.target.value)} placeholder="Dallas, TX" /></Field>
+        <Field label="Pickup Date"><input type="date" style={inp} value={f.pickupDate} onChange={e=>s("pickupDate",e.target.value)} /></Field>
+        <Field label="Delivery Date"><input type="date" style={inp} value={f.deliveryDate} onChange={e=>s("deliveryDate",e.target.value)} /></Field>
+        <Field label="Rate ($) *"><input type="number" style={inp} value={f.rate} onChange={e=>s("rate",e.target.value)} placeholder="2500" /></Field>
+        {broker
+          ? <Field label="Carrier Pay ($)"><input type="number" style={inp} value={f.carrierPay} onChange={e=>s("carrierPay",e.target.value)} placeholder="2000" /></Field>
+          : <Field label="Assign Driver">
+              <select style={inp} value={f.driver} onChange={e=>{const d=drivers.find(d=>d.name===e.target.value);s("driver",e.target.value);s("driverId",d?.id||null);}}>
+                <option value="">-- Select Driver --</option>
+                {drivers.filter(d=>d.status!=="inactive").map(d=><option key={d.id} value={d.name}>{d.name} ({d.status})</option>)}
+              </select>
+            </Field>
+        }
+        {broker && <Field label="Carrier"><input style={inp} value={f.carrier} onChange={e=>s("carrier",e.target.value)} placeholder="JT Trucking LLC" /></Field>}
+        <Field label="Commodity"><input style={inp} value={f.commodity} onChange={e=>s("commodity",e.target.value)} placeholder="General Freight" /></Field>
+        <Field label="Weight"><input style={inp} value={f.weight} onChange={e=>s("weight",e.target.value)} placeholder="42,000 lbs" /></Field>
+        <Field label="Miles"><input type="number" style={inp} value={f.miles} onChange={e=>s("miles",e.target.value)} placeholder="450" /></Field>
+        <Field label="PO Number"><input style={inp} value={f.poNumber} onChange={e=>s("poNumber",e.target.value)} placeholder="PO-2025-001" /></Field>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Field label="Notes"><textarea style={{ ...inp, height:60, resize:"vertical" }} value={f.notes} onChange={e=>s("notes",e.target.value)} /></Field>
+        </div>
+      </div>
+      {margin !== null && (
+        <div style={{ background:"#064e3b", borderRadius:8, padding:10, marginTop:8, textAlign:"center" }}>
+          <p style={{ color:"var(--muted)", fontSize:11 }}>Margin on this load</p>
+          <p style={{ color:"#10B981", fontSize:22, fontWeight:900 }}>${margin.toLocaleString()} ({Math.round(margin/+f.rate*100)}%)</p>
+        </div>
+      )}
+      <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"flex-end" }}>
+        <button onClick={onClose} style={{ padding:"8px 16px", borderRadius:8, border:"1px solid var(--border-hi)", background:"none", color:"#9CA3AF" }}>Cancel</button>
+        <button onClick={save} style={{ padding:"8px 20px", borderRadius:8, border:"none", background:"#1d4ed8", color:"#fff", fontWeight:700 }}>Save Load</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ════════════════════════════════════════
+//  OO PIPELINE
+// ════════════════════════════════════════
+const STAGES = [
+  { key:"lead",              label:"🎯 Lead",               color:"var(--muted)", desc:"Initial contact made" },
+  { key:"documents-pending", label:"📋 Docs Pending",       color:"#F59E0B", desc:"Collecting paperwork" },
+  { key:"active",            label:"✅ Active",              color:"#10B981", desc:"Running loads" },
+  { key:"inactive",          label:"⏸ Inactive",            color:"#EF4444", desc:"No longer running" },
+];
+
+function PipelineTab({ drivers, setDrivers, setTab }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState(null);
+
+  const totalGross = drivers.filter(d=>d.onboardingStatus==="active"||(d.status!=="inactive"&&!d.onboardingStatus)).reduce((s,d)=>s+(+d.weekGross||0),0);
+  const totalCut   = Math.round(totalGross * 0.12);
+  const activeCount = drivers.filter(d=>d.onboardingStatus==="active"||(d.status!=="inactive"&&!d.onboardingStatus)).length;
+
+  function del(id) {
+    if (!confirm("Remove this OO?")) return;
+    setDrivers(prev => prev.filter(d => d.id !== id));
+  }
+  function move(id, newStage) {
+    setDrivers(prev => prev.map(d => d.id===id ? { ...d, onboardingStatus:newStage } : d));
+  }
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <div>
+          <p style={{ fontWeight:900, fontSize:18 }}>🔄 Owner Operator Pipeline</p>
+          <p style={{ color:"var(--muted)", fontSize:12, marginTop:2 }}>Track every OO from first contact to active fleet member</p>
+        </div>
+        <button onClick={()=>setShowAdd(true)} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"10px 20px", borderRadius:10, fontWeight:700, fontSize:13 }}>+ Add OO</button>
+      </div>
+
+      {/* Fleet summary bar */}
+      <div className="grid-kpi-top" style={{ marginBottom:20 }}>
+        {[
+          { label:"Total Fleet",       value: drivers.length,                                                                      color:"#3B82F6", icon:"🚛" },
+          { label:"Active OOs",        value: activeCount,                                                                         color:"#10B981", icon:"✅" },
+          { label:"Fleet Gross / Wk",  value: "$"+totalGross.toLocaleString(),                                                      color:"#10B981", icon:"💵" },
+          { label:"Your 12% Cut / Wk", value: "$"+totalCut.toLocaleString(),                                                       color:"#F59E0B", icon:"✂️" },
+        ].map((s,i) => (
+          <Card key={i} style={{ textAlign:"center", padding:14 }}>
+            <p style={{ fontSize:22, marginBottom:4 }}>{s.icon}</p>
+            <p style={{ color:s.color, fontSize:22, fontWeight:900 }}>{s.value}</p>
+            <p style={{ color:"var(--muted)", fontSize:11, marginTop:2 }}>{s.label}</p>
+          </Card>
+        ))}
+      </div>
+
+      {drivers.length === 0 && (
+        <Card style={{ textAlign:"center", padding:56 }}>
+          <p style={{ fontSize:40, marginBottom:12 }}>🚛</p>
+          <p style={{ fontWeight:700, fontSize:18, marginBottom:8 }}>No OOs yet</p>
+          <p style={{ color:"var(--muted)", fontSize:13, marginBottom:20 }}>Add your first owner operator to start building your fleet.</p>
+          <button onClick={()=>setShowAdd(true)} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"10px 24px", borderRadius:8, fontWeight:700, fontSize:14 }}>+ Add Your First OO</button>
+        </Card>
+      )}
+
+      {/* Pipeline kanban */}
+      {drivers.length > 0 && (
+        <div className="kanban-4" style={{ overflowX:"auto" }}>
+          {STAGES.map(stage => {
+            const stageDrivers = drivers.filter(d => {
+              const os = d.onboardingStatus;
+              if (os) return os === stage.key;
+              // legacy records without onboardingStatus: map by dispatch status
+              if (stage.key === "active")   return d.status === "available" || d.status === "on-load";
+              if (stage.key === "inactive") return d.status === "inactive";
+              return false;
+            });
+            const stageGross = stageDrivers.reduce((s,d)=>s+(+d.weekGross||0),0);
+
+            return (
+              <div key={stage.key} style={{ background:"var(--bg-nav)", borderRadius:12, border:`1px solid ${stage.color}33`, padding:12, minHeight:300 }}>
+                {/* Column header */}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                  <div>
+                    <p style={{ fontWeight:700, fontSize:13, color:stage.color }}>{stage.label}</p>
+                    <p style={{ fontSize:10, color:"var(--dim)", marginTop:1 }}>{stage.desc}</p>
+                  </div>
+                  <span style={{ background:stage.color+"22", color:stage.color, borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:900 }}>{stageDrivers.length}</span>
+                </div>
+                {stage.key==="active" && stageDrivers.length>0 && (
+                  <div style={{ background:"#064e3b", borderRadius:8, padding:"6px 10px", marginBottom:8, textAlign:"center" }}>
+                    <p style={{ fontSize:10, color:"var(--muted)" }}>Combined gross / wk</p>
+                    <p style={{ color:"#10B981", fontWeight:900, fontSize:15 }}>${stageGross.toLocaleString()}</p>
+                    <p style={{ color:"#065f46", fontSize:10 }}>Your cut: ${Math.round(stageGross*0.12).toLocaleString()}/wk</p>
+                  </div>
+                )}
+
+                {/* OO cards */}
+                {stageDrivers.map(d => {
+                  const cdlDays = daysUntil(d.cdlExpiry);
+                  const inssDays = daysUntil(d.insuranceExpiry);
+                  const hasAlert = cdlDays<=60 || inssDays<=60 || daysUntil(d.medCardExpiry)<=60 || daysUntil(d.inspectionExpiry)<=60 || daysUntil(d.registrationExpiry)<=60;
+                  return (
+                    <div key={d.id} style={{ background:"var(--bg-card)", borderRadius:10, border:`1px solid ${hasAlert?"#F59E0B33":"#1f2937"}`, padding:12, marginBottom:8 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <p style={{ fontWeight:700, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.name}</p>
+                          {d.phone && <p style={{ fontSize:11, color:"var(--muted)", marginTop:1 }}>📞 {d.phone}</p>}
+                        </div>
+                        {hasAlert && <span style={{ fontSize:14, marginLeft:6 }}>⚠️</span>}
+                      </div>
+
+                      {d.truck && <p style={{ fontSize:11, color:"#9CA3AF", marginBottom:4 }}>🚛 {d.truck}</p>}
+
+                      {d.weekGross > 0 && (
+                        <div style={{ display:"flex", justifyContent:"space-between", background:"var(--bg-subtle)", borderRadius:6, padding:"4px 8px", marginBottom:8 }}>
+                          <span style={{ fontSize:11, color:"var(--muted)" }}>Gross/wk</span>
+                          <span style={{ fontSize:11, fontWeight:700, color:"#10B981" }}>${(+d.weekGross).toLocaleString()}</span>
+                        </div>
+                      )}
+
+                      {/* Compliance pills */}
+                      <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:8 }}>
+                        {[
+                          { label:"CDL",  days: daysUntil(d.cdlExpiry) },
+                          { label:"Med",  days: daysUntil(d.medCardExpiry) },
+                          { label:"Ins",  days: daysUntil(d.insuranceExpiry) },
+                          { label:"Insp", days: daysUntil(d.inspectionExpiry) },
+                          { label:"Reg",  days: daysUntil(d.registrationExpiry) },
+                        ].filter(x => x.days < 999).map((x,i) => (
+                          <span key={i} style={{ fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:3, background: daysUntilColor(x.days)+"22", color: daysUntilColor(x.days) }}>
+                            {x.label} {daysLabel(x.days)}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{ display:"flex", gap:4 }}>
+                        <button onClick={()=>setEditing(d)} style={{ flex:1, fontSize:11, padding:"5px", background:"var(--bg-subtle)", border:"none", color:"#9CA3AF", borderRadius:6, fontWeight:700 }}>✏️ Edit</button>
+                        {stage.key !== "active" && (
+                          <button onClick={()=>move(d.id,"active")} style={{ flex:1, fontSize:11, padding:"5px", background:"#064e3b", border:"none", color:"#34d399", borderRadius:6, fontWeight:700 }}>→ Active</button>
+                        )}
+                        {stage.key !== "inactive" && (
+                          <button onClick={()=>del(d.id)} style={{ fontSize:11, padding:"5px 8px", background:"var(--bg-subtle)", border:"none", color:"#EF4444", borderRadius:6 }}>✕</button>
+                        )}
+                      </div>
+
+                      {/* Move stage selector */}
+                      <select value={d.onboardingStatus||"active"} onChange={e=>move(d.id,e.target.value)}
+                        style={{ ...inp, fontSize:11, padding:"4px 6px", marginTop:6, color:"var(--muted)" }}>
+                        {STAGES.map(st=><option key={st.key} value={st.key}>{st.label}</option>)}
+                      </select>
+                    </div>
+                  );
+                })}
+
+                {stageDrivers.length === 0 && (
+                  <p style={{ color:"#374151", fontSize:12, textAlign:"center", marginTop:20 }}>No OOs here</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {(showAdd || editing) && (
+        <DriverModal driver={editing} onClose={()=>{setShowAdd(false);setEditing(null);}} setDrivers={setDrivers} />
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  DRIVERS
+// ════════════════════════════════════════
+function DriversTab({ drivers, setDrivers }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [filter, setFilter] = useState("all");
+
+  const filtered = filter==="all" ? drivers : drivers.filter(d=>d.type===filter||d.status===filter);
+
+  function del(id) { if(!confirm("Remove driver?")) return; setDrivers(prev=>prev.filter(d=>d.id!==id)); }
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div>
+          <p style={{ fontWeight:900, fontSize:16 }}>👥 Driver Roster</p>
+          <p style={{ color:"var(--muted)", fontSize:12 }}>{drivers.filter(d=>d.status!=="inactive").length} active · {drivers.filter(d=>d.type==="OO").length} OO · {drivers.filter(d=>d.type==="Leased").length} Leased</p>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <select value={filter} onChange={e=>setFilter(e.target.value)} style={{ ...inp, width:"auto", fontSize:12, padding:"6px 10px" }}>
+            <option value="all">All</option>
+            <option value="OO">OO Only</option>
+            <option value="Leased">Leased Only</option>
+            <option value="available">Available</option>
+            <option value="on-load">On Load</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <button onClick={()=>setShowAdd(true)} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"8px 16px", borderRadius:8, fontWeight:700, fontSize:13 }}>+ Add Driver</button>
+        </div>
+      </div>
+      {filtered.length === 0 && (
+        <Card style={{ textAlign:"center", padding:48 }}>
+          <p style={{ fontSize:36, marginBottom:12 }}>👤</p>
+          <p style={{ fontWeight:700, fontSize:16, marginBottom:8 }}>{drivers.length === 0 ? "No drivers yet" : "No drivers match this filter"}</p>
+          <p style={{ color:"var(--muted)", fontSize:13, marginBottom:20 }}>{drivers.length === 0 ? "Add your owner operator to get started." : "Try a different filter."}</p>
+          {drivers.length === 0 && <button onClick={()=>setShowAdd(true)} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"10px 24px", borderRadius:8, fontWeight:700, fontSize:14 }}>+ Add First Driver</button>}
+        </Card>
+      )}
+      {filtered.length > 0 && <div className="table-scroll"><Card style={{ padding:0, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:"var(--bg-nav)" }}>
+              {["Driver","Type","Status","Truck","CDL Expiry","Med Card","Insurance","CSA","Gross/Wk","Our 12%",""].map(h=>(
+                <th key={h} style={{ padding:"10px 12px", textAlign:"left", fontSize:11, color:"var(--muted)", fontWeight:700, whiteSpace:"nowrap", borderBottom:"1px solid var(--border)" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(d => {
+              const c=daysUntil(d.cdlExpiry), m=daysUntil(d.medCardExpiry), ins=daysUntil(d.insuranceExpiry);
+              return (
+                <tr key={d.id} style={{ borderBottom:"1px solid var(--border)" }}
+                  onMouseEnter={e=>e.currentTarget.style.background="#1f293755"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontWeight:700, fontSize:13 }}>{d.name}</p>
+                    <p style={{ fontSize:11, color:"var(--muted)" }}>{d.phone}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}><Badge label={d.type} color={d.type==="OO"?"#10B981":"#3B82F6"} /></td>
+                  <td style={{ padding:"10px 12px" }}><Badge label={d.status} color={d.status==="available"?"#10B981":d.status==="on-load"?"#3B82F6":"#6B7280"} /></td>
+                  <td style={{ padding:"10px 12px", fontSize:12, color:"#9CA3AF" }}>{d.truck}</td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:daysUntilColor(c) }}>{daysLabel(c)}</p>
+                    <p style={{ fontSize:10, color:"var(--dim)" }}>{d.cdlExpiry}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:daysUntilColor(m) }}>{daysLabel(m)}</p>
+                    <p style={{ fontSize:10, color:"var(--dim)" }}>{d.medCardExpiry}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:daysUntilColor(ins) }}>{daysLabel(ins)}</p>
+                    <p style={{ fontSize:10, color:"var(--dim)" }}>{d.insuranceExpiry}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <span style={{ fontWeight:900, color:d.csa<=15?"#10B981":d.csa<=40?"#F59E0B":"#EF4444" }}>{d.csa||0}</span>
+                  </td>
+                  <td style={{ padding:"10px 12px", color:"#10B981", fontWeight:700 }}>${d.weekGross.toLocaleString()}</td>
+                  <td style={{ padding:"10px 12px", color:"#10B981", fontWeight:700 }}>${Math.round(d.weekGross*0.12).toLocaleString()}</td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <div style={{ display:"flex", gap:4 }}>
+                      <button onClick={()=>setEditing(d)} style={{ fontSize:11, padding:"4px 10px", background:"var(--bg-subtle)", border:"none", color:"#9CA3AF", borderRadius:6 }}>Edit</button>
+                      <button onClick={()=>del(d.id)} style={{ fontSize:11, padding:"4px 10px", background:"var(--bg-subtle)", border:"none", color:"#EF4444", borderRadius:6 }}>✕</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card></div>}
+      {(showAdd||editing) && <DriverModal driver={editing} onClose={()=>{setShowAdd(false);setEditing(null);}} setDrivers={setDrivers} />}
+    </div>
+  );
+}
+
+function DriverModal({ driver, onClose, setDrivers }) {
+  const [f, setF] = useState(driver || {
+    name:"", phone:"", email:"", cdl:"", cdlExpiry:"", medCardExpiry:"",
+    truck:"", plate:"", vin:"", type:"OO", status:"available",
+    onboardingStatus:"lead", dateSigned:"",
+    mvr:"Clean", csa:0, drugTest:"", drugTestPass:true,
+    insuranceExpiry:"", inspectionExpiry:"", registrationExpiry:"",
+    weekGross:0, totalLoads:0, joinDate:TODAY, notes:""
+  });
+  const s = (k,v) => setF(p=>({...p,[k]:v}));
+
+  function save() {
+    if (!f.name) return alert("Full name is required");
+    const rec = {
+      ...f,
+      id: driver ? driver.id : Date.now(),
+      weekGross:  +f.weekGross  || 0,
+      csa:        +f.csa        || 0,
+      totalLoads: +f.totalLoads || 0,
+    };
+    if (driver) setDrivers(prev => prev.map(d => d.id===driver.id ? rec : d));
+    else        setDrivers(prev => [...prev, rec]);
+    onClose();
+  }
+
+  const cut = Math.round((+f.weekGross||0) * 0.12);
+
+  const SEC = (label) => (
+    <div style={{ gridColumn:"1/-1", borderTop:"1px solid var(--border)", paddingTop:12, marginTop:4 }}>
+      <p style={{ fontSize:11, fontWeight:700, color:"var(--dim)", letterSpacing:1, textTransform:"uppercase" }}>{label}</p>
+    </div>
+  );
+
+  return (
+    <Modal title={driver ? "Edit OO Profile" : "Add Owner Operator"} onClose={onClose} wide>
+      <div className="form-grid">
+
+        {SEC("Contact Info")}
+        <Field label="Full Name *"><input style={inp} value={f.name} onChange={e=>s("name",e.target.value)} placeholder="John Smith" /></Field>
+        <Field label="Phone"><input style={inp} value={f.phone} onChange={e=>s("phone",e.target.value)} placeholder="832-555-0000" /></Field>
+        <Field label="Email"><input style={inp} value={f.email} onChange={e=>s("email",e.target.value)} placeholder="driver@email.com" /></Field>
+        <Field label="CDL Number"><input style={inp} value={f.cdl} onChange={e=>s("cdl",e.target.value)} placeholder="TX1234567" /></Field>
+
+        {SEC("Onboarding")}
+        <Field label="Onboarding Status">
+          <select style={inp} value={f.onboardingStatus} onChange={e=>s("onboardingStatus",e.target.value)}>
+            <option value="lead">Lead</option>
+            <option value="documents-pending">Documents Pending</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </Field>
+        <Field label="Driver Type">
+          <select style={inp} value={f.type} onChange={e=>s("type",e.target.value)}>
+            <option value="OO">Owner Operator (OO)</option>
+            <option value="Leased">Leased</option>
+            <option value="Company">Company Driver</option>
+          </select>
+        </Field>
+        <Field label="Date Signed / Joined"><input type="date" style={inp} value={f.dateSigned} onChange={e=>s("dateSigned",e.target.value)} /></Field>
+        <Field label="Dispatch Status">
+          <select style={inp} value={f.status} onChange={e=>s("status",e.target.value)}>
+            <option value="available">Available</option>
+            <option value="on-load">On Load</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </Field>
+
+        {SEC("Truck Info")}
+        <Field label="Truck (Year Make Model)"><input style={inp} value={f.truck} onChange={e=>s("truck",e.target.value)} placeholder="2020 Peterbilt 579" /></Field>
+        <Field label="License Plate"><input style={inp} value={f.plate} onChange={e=>s("plate",e.target.value)} placeholder="TX-ABC123" /></Field>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Field label="VIN"><input style={inp} value={f.vin} onChange={e=>s("vin",e.target.value)} placeholder="1XPWD49X1ED215307" /></Field>
+        </div>
+
+        {SEC("Compliance Dates")}
+        <Field label="CDL Expiry"><input type="date" style={inp} value={f.cdlExpiry} onChange={e=>s("cdlExpiry",e.target.value)} /></Field>
+        <Field label="Medical Card Expiry"><input type="date" style={inp} value={f.medCardExpiry} onChange={e=>s("medCardExpiry",e.target.value)} /></Field>
+        <Field label="Insurance Expiry"><input type="date" style={inp} value={f.insuranceExpiry} onChange={e=>s("insuranceExpiry",e.target.value)} /></Field>
+        <Field label="Annual Inspection Expiry"><input type="date" style={inp} value={f.inspectionExpiry} onChange={e=>s("inspectionExpiry",e.target.value)} /></Field>
+        <Field label="Registration Expiry"><input type="date" style={inp} value={f.registrationExpiry} onChange={e=>s("registrationExpiry",e.target.value)} /></Field>
+        <Field label="Last Drug Test"><input type="date" style={inp} value={f.drugTest} onChange={e=>s("drugTest",e.target.value)} /></Field>
+        <Field label="MVR Status">
+          <select style={inp} value={f.mvr} onChange={e=>s("mvr",e.target.value)}>
+            <option>Clean</option><option>1 Minor</option><option>2 Violations</option><option>3+ Violations</option><option>DQ</option>
+          </select>
+        </Field>
+        <Field label="CSA Score"><input type="number" style={inp} value={f.csa} onChange={e=>s("csa",e.target.value)} placeholder="0" /></Field>
+
+        {SEC("Financials")}
+        <Field label="Weekly Gross ($)"><input type="number" style={inp} value={f.weekGross} onChange={e=>s("weekGross",e.target.value)} placeholder="4500" /></Field>
+        <div style={{ display:"flex", flexDirection:"column", justifyContent:"flex-end", paddingBottom:12 }}>
+          <p style={{ fontSize:11, color:"var(--muted)", marginBottom:4 }}>YOUR 12% CUT / WEEK</p>
+          <p style={{ fontSize:22, fontWeight:900, color:"#10B981" }}>${cut.toLocaleString()}</p>
+          <p style={{ fontSize:10, color:"var(--dim)" }}>≈ ${(cut*4.3).toLocaleString()}/mo</p>
+        </div>
+
+        <div style={{ gridColumn:"1/-1" }}>
+          <Field label="Notes"><textarea style={{ ...inp, height:60, resize:"vertical" }} value={f.notes} onChange={e=>s("notes",e.target.value)} /></Field>
+        </div>
+      </div>
+
+      <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"flex-end" }}>
+        <button onClick={onClose} style={{ padding:"8px 16px", borderRadius:8, border:"1px solid var(--border-hi)", background:"none", color:"#9CA3AF" }}>Cancel</button>
+        <button onClick={save} style={{ padding:"8px 20px", borderRadius:8, border:"none", background:"#1d4ed8", color:"#fff", fontWeight:700 }}>Save OO Profile</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ════════════════════════════════════════
+//  LOADS
+// ════════════════════════════════════════
+function LoadsTab({ loads, setLoads, drivers }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [statusF, setStatusF] = useState("all");
+  const [typeF, setTypeF] = useState("all");
+
+  const filtered = loads.filter(l => {
+    if (statusF!=="all" && l.status!==statusF) return false;
+    if (typeF!=="all" && l.type!==typeF) return false;
+    return true;
+  });
+
+  function del(id) { if(!confirm("Delete load?")) return; setLoads(prev=>prev.filter(l=>l.id!==id)); }
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div>
+          <p style={{ fontWeight:900, fontSize:16 }}>📦 All Loads</p>
+          <p style={{ color:"var(--muted)", fontSize:12 }}>{loads.length} total · ${loads.filter(l=>l.status==="delivered").reduce((s,l)=>s+l.rate,0).toLocaleString()} delivered gross</p>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <select value={typeF} onChange={e=>setTypeF(e.target.value)} style={{ ...inp, width:"auto", fontSize:12, padding:"6px 10px" }}>
+            <option value="all">All Types</option><option value="oo">OO</option><option value="broker">Brokered</option>
+          </select>
+          <select value={statusF} onChange={e=>setStatusF(e.target.value)} style={{ ...inp, width:"auto", fontSize:12, padding:"6px 10px" }}>
+            {["all","pending","assigned","picked-up","in-transit","delivered"].map(v=><option key={v} value={v}>{v==="all"?"All Status":v}</option>)}
+          </select>
+          <button onClick={()=>setShowAdd(true)} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"8px 16px", borderRadius:8, fontWeight:700, fontSize:13 }}>+ Add Load</button>
+        </div>
+      </div>
+      {filtered.length === 0 && (
+        <Card style={{ textAlign:"center", padding:48 }}>
+          <p style={{ fontSize:36, marginBottom:12 }}>📦</p>
+          <p style={{ fontWeight:700, fontSize:16, marginBottom:8 }}>{loads.length === 0 ? "No loads yet" : "No loads match this filter"}</p>
+          <p style={{ color:"var(--muted)", fontSize:13, marginBottom:20 }}>{loads.length === 0 ? "Add your first load to start tracking routes, rates, and revenue." : "Try a different filter."}</p>
+          {loads.length === 0 && <button onClick={()=>setShowAdd(true)} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"10px 24px", borderRadius:8, fontWeight:700, fontSize:14 }}>+ Add First Load</button>}
+        </Card>
+      )}
+      {filtered.length > 0 && <div className="table-scroll"><Card style={{ padding:0, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:"var(--bg-nav)" }}>
+              {["Type","Status","Route","Shipper","Driver/Carrier","Pickup","Rate","Our Margin","Invoice",""].map(h=>(
+                <th key={h} style={{ padding:"10px 12px", textAlign:"left", fontSize:11, color:"var(--muted)", fontWeight:700, whiteSpace:"nowrap", borderBottom:"1px solid var(--border)" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(l => {
+              const margin = l.type==="broker" ? l.rate-l.carrierPay : Math.round(l.rate*0.12);
+              return (
+                <tr key={l.id} style={{ borderBottom:"1px solid var(--border)" }}
+                  onMouseEnter={e=>e.currentTarget.style.background="#1f293755"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <td style={{ padding:"10px 12px" }}><Badge label={l.type==="oo"?"OO":"Broker"} color={l.type==="oo"?"#10B981":"#F59E0B"} /></td>
+                  <td style={{ padding:"10px 12px" }}><Badge label={l.status} color={statusColor(l.status)} /></td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontSize:12, fontWeight:700 }}>{l.origin}</p>
+                    <p style={{ fontSize:11, color:"var(--muted)" }}>→ {l.dest}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px", fontSize:12 }}>{l.shipper}</td>
+                  <td style={{ padding:"10px 12px", fontSize:12, color:"#9CA3AF" }}>{l.type==="oo"?(l.driver||"—"):(l.carrier||"—")}</td>
+                  <td style={{ padding:"10px 12px", fontSize:12, color:"var(--muted)" }}>{l.pickupDate||"—"}</td>
+                  <td style={{ padding:"10px 12px", fontWeight:700 }}>${l.rate.toLocaleString()}</td>
+                  <td style={{ padding:"10px 12px", color:"#10B981", fontWeight:700 }}>${margin.toLocaleString()}</td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <span style={{ fontSize:11, color:l.paid?"#10B981":l.invoiced?"#F59E0B":"#6B7280" }}>
+                      {l.paid?"✅ Paid":l.invoiced?"📤 Invoiced":"⏳ Pending"}
+                    </span>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <div style={{ display:"flex", gap:4 }}>
+                      <button onClick={()=>setEditing(l)} style={{ fontSize:11, padding:"4px 8px", background:"var(--bg-subtle)", border:"none", color:"#9CA3AF", borderRadius:6 }}>Edit</button>
+                      <button onClick={()=>del(l.id)} style={{ fontSize:11, padding:"4px 8px", background:"var(--bg-subtle)", border:"none", color:"#EF4444", borderRadius:6 }}>✕</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card></div>}
+      {(showAdd||editing) && <LoadModal existing={editing} onClose={()=>{setShowAdd(false);setEditing(null);}} setLoads={setLoads} drivers={drivers} />}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  FINANCE
+// ════════════════════════════════════════
+const BROKER_BLANK = { shipper:"", origin:"", dest:"", date:TODAY, loadRate:"", carrierRate:"", notes:"" };
+
+function FinanceTab({ loads, setLoads, drivers, ooFees, brokerProfit, totalProfit, brokerLoads, setBrokerLoads }) {
+  const brokerDel = loads.filter(l=>l.type==="broker"&&l.status==="delivered");
+  const needsInvoice = loads.filter(l=>l.status==="delivered"&&!l.invoiced);
+  const outstanding = loads.filter(l=>l.invoiced&&!l.paid);
+
+  const markInvoiced = id => setLoads(prev=>prev.map(l=>l.id===id?{...l,invoiced:true}:l));
+  const markPaid     = id => setLoads(prev=>prev.map(l=>l.id===id?{...l,paid:true}:l));
+
+  // Brokerage form state
+  const [showBrokerForm, setShowBrokerForm] = React.useState(false);
+  const [brokerForm, setBrokerForm] = React.useState(BROKER_BLANK);
+  const [editBrokerId, setEditBrokerId] = React.useState(null);
+
+  const bFld = (k,v) => setBrokerForm(p=>({...p,[k]:v}));
+
+  const saveBrokerLoad = () => {
+    if (!brokerForm.loadRate || !brokerForm.carrierRate) return;
+    if (editBrokerId) {
+      setBrokerLoads(prev=>prev.map(b=>b.id===editBrokerId?{...brokerForm,id:editBrokerId}:b));
+    } else {
+      setBrokerLoads(prev=>[...prev,{...brokerForm,id:Date.now()}]);
+    }
+    setBrokerForm(BROKER_BLANK); setShowBrokerForm(false); setEditBrokerId(null);
+  };
+
+  const editBrokerLoad = b => { setBrokerForm({...b}); setEditBrokerId(b.id); setShowBrokerForm(true); };
+  const deleteBrokerLoad = id => { if(confirm("Delete this brokerage load?")) setBrokerLoads(prev=>prev.filter(b=>b.id!==id)); };
+
+  const totalLoadRevenue  = brokerLoads.reduce((s,b)=>s+(Number(b.loadRate)||0), 0);
+  const totalCarrierCost  = brokerLoads.reduce((s,b)=>s+(Number(b.carrierRate)||0), 0);
+  const totalBrokerProfit = totalLoadRevenue - totalCarrierCost;
+
+  const kpis = [
+    { label:"OO Dispatch Fees",   value:ooFees,       color:"#10B981", sub:`${drivers.filter(d=>d.weekGross>0).length} drivers × 12%` },
+    { label:"Brokerage Profit",   value:brokerProfit,  color:"#F59E0B", sub:`${brokerDel.length + brokerLoads.length} loads brokered` },
+    { label:"Total Weekly Profit",value:totalProfit,   color:"#10B981", sub:`≈ $${(totalProfit*4.3).toLocaleString()}/mo` },
+    { label:"Outstanding A/R",    value:outstanding.reduce((s,l)=>s+l.rate,0), color:"#EF4444", sub:`${outstanding.length} invoices unpaid` },
+  ];
+
+  return (
+    <div>
+      <p style={{ fontWeight:900, fontSize:16, marginBottom:16 }}>💰 Finance Dashboard</p>
+      <div className="grid-kpi-top" style={{ marginBottom:16 }}>
+        {kpis.map((k,i) => (
+          <Card key={i} style={{ textAlign:"center" }}>
+            <p style={{ color:"var(--muted)", fontSize:11, marginBottom:4 }}>{k.label}</p>
+            <p style={{ color:k.color, fontSize:24, fontWeight:900 }}>${k.value.toLocaleString()}</p>
+            <p style={{ color:"var(--dim)", fontSize:11, marginTop:2 }}>{k.sub}</p>
+          </Card>
+        ))}
+      </div>
+
+      {/* ── Brokerage Load Tracker ─────────────────────── */}
+      <Card style={{ marginBottom:16 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, flexWrap:"wrap", gap:8 }}>
+          <p style={{ fontWeight:700, fontSize:15, margin:0 }}>📦 Brokerage Load Tracker</p>
+          <button onClick={()=>{ setBrokerForm(BROKER_BLANK); setEditBrokerId(null); setShowBrokerForm(v=>!v); }}
+            style={{ padding:"7px 14px", background:"#2563eb", border:"none", color:"#fff", borderRadius:8, fontSize:12, fontWeight:700 }}>
+            {showBrokerForm && !editBrokerId ? "✕ Cancel" : "+ Add Load"}
+          </button>
+        </div>
+
+        {showBrokerForm && (
+          <div style={{ background:"var(--bg-subtle)", borderRadius:10, padding:16, marginBottom:16, border:"1px solid var(--border-hi)" }}>
+            <p style={{ fontWeight:700, fontSize:13, marginBottom:12, color:"var(--muted)" }}>{editBrokerId ? "Edit Brokerage Load" : "New Brokerage Load"}</p>
+            <div className="form-grid" style={{ gap:10, marginBottom:10 }}>
+              <div>
+                <label style={{ fontSize:11, color:"var(--muted)", display:"block", marginBottom:4 }}>Customer / Shipper</label>
+                <input value={brokerForm.shipper} onChange={e=>bFld("shipper",e.target.value)} placeholder="e.g. Amazon Freight"
+                  style={{ width:"100%", background:"var(--bg-card)", border:"1px solid var(--border-hi)", color:"var(--text)", borderRadius:8, padding:"8px 10px", fontSize:13, boxSizing:"border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize:11, color:"var(--muted)", display:"block", marginBottom:4 }}>Date</label>
+                <input type="date" value={brokerForm.date} onChange={e=>bFld("date",e.target.value)}
+                  style={{ width:"100%", background:"var(--bg-card)", border:"1px solid var(--border-hi)", color:"var(--text)", borderRadius:8, padding:"8px 10px", fontSize:13, boxSizing:"border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize:11, color:"var(--muted)", display:"block", marginBottom:4 }}>Origin</label>
+                <input value={brokerForm.origin} onChange={e=>bFld("origin",e.target.value)} placeholder="City, ST"
+                  style={{ width:"100%", background:"var(--bg-card)", border:"1px solid var(--border-hi)", color:"var(--text)", borderRadius:8, padding:"8px 10px", fontSize:13, boxSizing:"border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize:11, color:"var(--muted)", display:"block", marginBottom:4 }}>Destination</label>
+                <input value={brokerForm.dest} onChange={e=>bFld("dest",e.target.value)} placeholder="City, ST"
+                  style={{ width:"100%", background:"var(--bg-card)", border:"1px solid var(--border-hi)", color:"var(--text)", borderRadius:8, padding:"8px 10px", fontSize:13, boxSizing:"border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize:11, color:"var(--muted)", display:"block", marginBottom:4 }}>Load Rate — what customer pays ($) *</label>
+                <input type="number" min="0" value={brokerForm.loadRate} onChange={e=>bFld("loadRate",e.target.value)} placeholder="3500"
+                  style={{ width:"100%", background:"var(--bg-card)", border:"1px solid var(--border-hi)", color:"var(--text)", borderRadius:8, padding:"8px 10px", fontSize:13, boxSizing:"border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize:11, color:"var(--muted)", display:"block", marginBottom:4 }}>Carrier Rate — what we pay carrier ($) *</label>
+                <input type="number" min="0" value={brokerForm.carrierRate} onChange={e=>bFld("carrierRate",e.target.value)} placeholder="3000"
+                  style={{ width:"100%", background:"var(--bg-card)", border:"1px solid var(--border-hi)", color:"var(--text)", borderRadius:8, padding:"8px 10px", fontSize:13, boxSizing:"border-box" }} />
+              </div>
+            </div>
+            {(brokerForm.loadRate && brokerForm.carrierRate) && (
+              <div style={{ background:"var(--bg-card)", border:"1px solid var(--border-hi)", borderRadius:8, padding:"10px 14px", marginBottom:12, display:"flex", gap:24, flexWrap:"wrap" }}>
+                <span style={{ fontSize:12, color:"var(--muted)" }}>Load Rate: <b style={{ color:"#3B82F6" }}>${Number(brokerForm.loadRate).toLocaleString()}</b></span>
+                <span style={{ fontSize:12, color:"var(--muted)" }}>Carrier Cost: <b style={{ color:"#EF4444" }}>${Number(brokerForm.carrierRate).toLocaleString()}</b></span>
+                <span style={{ fontSize:12, color:"var(--muted)" }}>Margin: <b style={{ color: (Number(brokerForm.loadRate)-Number(brokerForm.carrierRate))>=0?"#10B981":"#EF4444" }}>${(Number(brokerForm.loadRate)-Number(brokerForm.carrierRate)).toLocaleString()}</b></span>
+              </div>
+            )}
+            <div>
+              <label style={{ fontSize:11, color:"var(--muted)", display:"block", marginBottom:4 }}>Notes</label>
+              <input value={brokerForm.notes} onChange={e=>bFld("notes",e.target.value)} placeholder="Optional notes"
+                style={{ width:"100%", background:"var(--bg-card)", border:"1px solid var(--border-hi)", color:"var(--text)", borderRadius:8, padding:"8px 10px", fontSize:13, boxSizing:"border-box" }} />
+            </div>
+            <div style={{ display:"flex", gap:8, marginTop:12 }}>
+              <button onClick={saveBrokerLoad}
+                style={{ flex:1, padding:"9px 0", background:"#10B981", border:"none", color:"#fff", borderRadius:8, fontWeight:700, fontSize:13 }}>
+                {editBrokerId ? "Save Changes" : "Add Load"}
+              </button>
+              <button onClick={()=>{ setShowBrokerForm(false); setEditBrokerId(null); setBrokerForm(BROKER_BLANK); }}
+                style={{ padding:"9px 16px", background:"var(--bg-subtle)", border:"1px solid var(--border-hi)", color:"var(--text)", borderRadius:8, fontWeight:700, fontSize:13 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {brokerLoads.length === 0 ? (
+          <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"20px 0" }}>No brokerage loads yet. Add one above.</p>
+        ) : (
+          <div className="table-scroll">
+            <table style={{ width:"100%", borderCollapse:"collapse", minWidth:600 }}>
+              <thead>
+                <tr style={{ borderBottom:"1px solid var(--border)" }}>
+                  {["Date","Customer","Route","Load Rate","Carrier Rate","Margin",""].map(h=>(
+                    <th key={h} style={{ padding:"6px 10px", textAlign: h===""?"center":"left", fontSize:11, color:"var(--muted)", whiteSpace:"nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {brokerLoads.map(b=>{
+                  const margin = (Number(b.loadRate)||0) - (Number(b.carrierRate)||0);
+                  return (
+                    <tr key={b.id} style={{ borderBottom:"1px solid var(--border)" }}>
+                      <td style={{ padding:"9px 10px", fontSize:12, color:"var(--muted)", whiteSpace:"nowrap" }}>{b.date}</td>
+                      <td style={{ padding:"9px 10px", fontWeight:700, fontSize:13 }}>{b.shipper||"—"}</td>
+                      <td style={{ padding:"9px 10px", fontSize:12, color:"var(--muted)" }}>
+                        {b.origin&&b.dest ? `${b.origin} → ${b.dest}` : b.origin||b.dest||"—"}
+                      </td>
+                      <td style={{ padding:"9px 10px", fontWeight:700, color:"#3B82F6" }}>${(Number(b.loadRate)||0).toLocaleString()}</td>
+                      <td style={{ padding:"9px 10px", color:"#EF4444" }}>${(Number(b.carrierRate)||0).toLocaleString()}</td>
+                      <td style={{ padding:"9px 10px", fontWeight:900, color: margin>=0?"#10B981":"#EF4444" }}>${margin.toLocaleString()}</td>
+                      <td style={{ padding:"9px 10px", textAlign:"center", whiteSpace:"nowrap" }}>
+                        <button onClick={()=>editBrokerLoad(b)} style={{ padding:"4px 10px", background:"var(--bg-subtle)", border:"1px solid var(--border-hi)", color:"var(--text)", borderRadius:6, fontSize:11, marginRight:4 }}>Edit</button>
+                        <button onClick={()=>deleteBrokerLoad(b.id)} style={{ padding:"4px 10px", background:"#7f1d1d", border:"none", color:"#fca5a5", borderRadius:6, fontSize:11 }}>Delete</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop:"2px solid var(--border-hi)", background:"var(--bg-subtle)" }}>
+                  <td colSpan={3} style={{ padding:"10px", fontWeight:700, fontSize:13 }}>Totals ({brokerLoads.length} loads)</td>
+                  <td style={{ padding:"10px", fontWeight:900, color:"#3B82F6", fontSize:14 }}>${totalLoadRevenue.toLocaleString()}</td>
+                  <td style={{ padding:"10px", fontWeight:900, color:"#EF4444", fontSize:14 }}>${totalCarrierCost.toLocaleString()}</td>
+                  <td style={{ padding:"10px", fontWeight:900, color: totalBrokerProfit>=0?"#10B981":"#EF4444", fontSize:14 }}>${totalBrokerProfit.toLocaleString()}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <div className="grid-2col" style={{ marginBottom:16 }}>
+        <Card>
+          <p style={{ fontWeight:700, marginBottom:10 }}>🚛 Driver Settlements This Week</p>
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead>
+              <tr style={{ borderBottom:"1px solid var(--border)" }}>
+                {["Driver","Type","Gross","Our 12%","They Keep"].map(h=>(
+                  <th key={h} style={{ padding:"6px 8px", textAlign: h==="Driver"?"left":"right", fontSize:11, color:"var(--muted)" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {drivers.filter(d=>d.weekGross>0).map(d=>(
+                <tr key={d.id} style={{ borderBottom:"1px solid var(--border)" }}>
+                  <td style={{ padding:"8px", fontWeight:700, fontSize:13 }}>{d.name}</td>
+                  <td style={{ padding:"8px", textAlign:"right" }}><Badge label={d.type} color={d.type==="OO"?"#10B981":"#3B82F6"} small /></td>
+                  <td style={{ padding:"8px", textAlign:"right" }}>${d.weekGross.toLocaleString()}</td>
+                  <td style={{ padding:"8px", textAlign:"right", color:"#10B981", fontWeight:700 }}>${Math.round(d.weekGross*0.12).toLocaleString()}</td>
+                  <td style={{ padding:"8px", textAlign:"right", color:"var(--muted)" }}>${Math.round(d.weekGross*0.88).toLocaleString()}</td>
+                </tr>
+              ))}
+              <tr style={{ borderTop:"2px solid var(--border-hi)" }}>
+                <td colSpan={3} style={{ padding:"8px", fontWeight:700 }}>Total</td>
+                <td style={{ padding:"8px", textAlign:"right", color:"#10B981", fontWeight:900 }}>${ooFees.toLocaleString()}</td>
+                <td style={{ padding:"8px", textAlign:"right", color:"var(--muted)", fontWeight:700 }}>${drivers.filter(d=>d.weekGross>0).reduce((s,d)=>s+Math.round(d.weekGross*0.88),0).toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
+        </Card>
+
+        <Card>
+          <p style={{ fontWeight:700, marginBottom:10 }}>📈 Load-Linked Brokerage</p>
+          <p style={{ fontSize:11, color:"var(--muted)", marginBottom:10 }}>Delivered broker loads from the Loads tab</p>
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead>
+              <tr style={{ borderBottom:"1px solid var(--border)" }}>
+                {["Shipper","Route","Rate","Carrier","Margin"].map(h=>(
+                  <th key={h} style={{ padding:"6px 8px", textAlign:"left", fontSize:11, color:"var(--muted)" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {brokerDel.length === 0 && (
+                <tr><td colSpan={5} style={{ padding:"12px 8px", color:"var(--muted)", fontSize:12 }}>No delivered broker loads yet.</td></tr>
+              )}
+              {brokerDel.map(l=>(
+                <tr key={l.id} style={{ borderBottom:"1px solid var(--border)" }}>
+                  <td style={{ padding:"8px", fontSize:12, fontWeight:700 }}>{l.shipper}</td>
+                  <td style={{ padding:"8px", fontSize:11, color:"var(--muted)" }}>{l.origin.split(",")[0]}→{l.dest.split(",")[0]}</td>
+                  <td style={{ padding:"8px", fontSize:12 }}>${l.rate.toLocaleString()}</td>
+                  <td style={{ padding:"8px", fontSize:12, color:"var(--muted)" }}>${l.carrierPay.toLocaleString()}</td>
+                  <td style={{ padding:"8px", fontWeight:700, color:"#F59E0B" }}>${(l.rate-l.carrierPay).toLocaleString()}</td>
+                </tr>
+              ))}
+              <tr style={{ borderTop:"2px solid var(--border-hi)" }}>
+                <td colSpan={4} style={{ padding:"8px", fontWeight:700 }}>Total</td>
+                <td style={{ padding:"8px", fontWeight:900, color:"#F59E0B" }}>${brokerDel.reduce((s,l)=>s+l.rate-l.carrierPay,0).toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
+        </Card>
+      </div>
+
+      {needsInvoice.length > 0 && (
+        <Card style={{ marginBottom:16, borderColor:"#92400e" }}>
+          <p style={{ fontWeight:700, marginBottom:10, color:"#F59E0B" }}>⚠️ Needs Invoice — {needsInvoice.length} delivered loads</p>
+          {needsInvoice.map(l=>(
+            <div key={l.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+              <div style={{ flex:1 }}>
+                <p style={{ fontSize:13, fontWeight:700 }}>{l.shipper}</p>
+                <p style={{ fontSize:12, color:"var(--muted)" }}>{l.origin} → {l.dest} · {l.pickupDate}</p>
+              </div>
+              <p style={{ fontWeight:700 }}>${l.rate.toLocaleString()}</p>
+              <button onClick={()=>markInvoiced(l.id)} style={{ padding:"6px 12px", background:"#1d4ed8", border:"none", color:"#fff", borderRadius:8, fontSize:12, fontWeight:700 }}>Mark Invoiced</button>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {outstanding.length > 0 && (
+        <Card style={{ borderColor:"#991b1b" }}>
+          <p style={{ fontWeight:700, marginBottom:10, color:"#EF4444" }}>📤 Outstanding Invoices (A/R) — ${outstanding.reduce((s,l)=>s+l.rate,0).toLocaleString()}</p>
+          {outstanding.map(l=>(
+            <div key={l.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+              <div style={{ flex:1 }}>
+                <p style={{ fontSize:13, fontWeight:700 }}>{l.shipper}</p>
+                <p style={{ fontSize:12, color:"var(--muted)" }}>{l.origin} → {l.dest} · Invoiced, awaiting payment</p>
+              </div>
+              <p style={{ fontWeight:700 }}>${l.rate.toLocaleString()}</p>
+              <button onClick={()=>markPaid(l.id)} style={{ padding:"6px 12px", background:"#064e3b", border:"none", color:"#34d399", borderRadius:8, fontSize:12, fontWeight:700 }}>Mark Paid ✓</button>
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  COMPLIANCE
+// ════════════════════════════════════════
+function ComplianceTab({ drivers, alerts }) {
+  const red = alerts.filter(a=>a.sev==="red").length;
+  const yellow = alerts.filter(a=>a.sev==="yellow").length;
+  const clear = drivers.filter(d => !alerts.some(a=>a.driver===d.name)).length;
+
+  return (
+    <div>
+      <p style={{ fontWeight:900, fontSize:16, marginBottom:16 }}>🛡️ Compliance Dashboard</p>
+      <div className="grid-3col" style={{ gap:12, marginBottom:16 }}>
+        <Card style={{ textAlign:"center", borderColor: red>0?"#991b1b":"#1f2937" }}>
+          <p style={{ color:"#EF4444", fontSize:32, fontWeight:900 }}>{red}</p>
+          <p style={{ color:"var(--muted)", fontSize:12 }}>🔴 Critical (expired or ≤30 days)</p>
+        </Card>
+        <Card style={{ textAlign:"center", borderColor: yellow>0?"#92400e":"#1f2937" }}>
+          <p style={{ color:"#F59E0B", fontSize:32, fontWeight:900 }}>{yellow}</p>
+          <p style={{ color:"var(--muted)", fontSize:12 }}>🟡 Warning (31–60 days)</p>
+        </Card>
+        <Card style={{ textAlign:"center", borderColor:"#065f46" }}>
+          <p style={{ color:"#10B981", fontSize:32, fontWeight:900 }}>{clear}</p>
+          <p style={{ color:"var(--muted)", fontSize:12 }}>🟢 Drivers fully clear</p>
+        </Card>
+      </div>
+      <div className="table-scroll"><Card style={{ padding:0, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:"var(--bg-nav)" }}>
+              {["Driver","Type","CDL Expiry","Med Card","Insurance","Drug Test","MVR","CSA","Status"].map(h=>(
+                <th key={h} style={{ padding:"10px 12px", textAlign:"left", fontSize:11, color:"var(--muted)", fontWeight:700, whiteSpace:"nowrap", borderBottom:"1px solid var(--border)" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {drivers.map(d => {
+              const c=daysUntil(d.cdlExpiry), m=daysUntil(d.medCardExpiry), ins=daysUntil(d.insuranceExpiry);
+              const crit = c<=30||m<=30||ins<=30||d.csa>=65;
+              const warn = !crit && (c<=60||m<=60||ins<=60);
+              return (
+                <tr key={d.id} style={{ borderBottom:"1px solid var(--border)", background: crit?"rgba(239,68,68,0.06)":warn?"rgba(245,158,11,0.06)":"transparent" }}>
+                  <td style={{ padding:"10px 12px", fontWeight:700, fontSize:13 }}>{d.name}</td>
+                  <td style={{ padding:"10px 12px" }}><Badge label={d.type} color={d.type==="OO"?"#10B981":"#3B82F6"} small /></td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:daysUntilColor(c) }}>{daysLabel(c)}</p>
+                    <p style={{ fontSize:10, color:"var(--dim)" }}>{d.cdlExpiry}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:daysUntilColor(m) }}>{daysLabel(m)}</p>
+                    <p style={{ fontSize:10, color:"var(--dim)" }}>{d.medCardExpiry}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:daysUntilColor(ins) }}>{daysLabel(ins)}</p>
+                    <p style={{ fontSize:10, color:"var(--dim)" }}>{d.insuranceExpiry}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:d.drugTestPass?"#10B981":"#EF4444" }}>{d.drugTestPass?"Pass":"Fail"}</p>
+                    <p style={{ fontSize:10, color:"var(--dim)" }}>{d.drugTest}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:d.mvr==="Clean"?"#10B981":d.mvr==="1 Minor"?"#F59E0B":"#EF4444" }}>{d.mvr}</p>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <span style={{ fontWeight:900, color:d.csa<=15?"#10B981":d.csa<=40?"#F59E0B":"#EF4444" }}>{d.csa||0}</span>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <Badge label={crit?"ACTION REQ":warn?"WATCH":"CLEAR"} color={crit?"#EF4444":warn?"#F59E0B":"#10B981"} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card></div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  CONTACTS
+// ════════════════════════════════════════
+function ContactsTab({ contacts, setContacts }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [typeF, setTypeF] = useState("all");
+
+  const filtered = typeF==="all" ? contacts : contacts.filter(c=>c.type===typeF);
+  const typeColor = { Shipper:"#10B981", Broker:"#F59E0B", Carrier:"#3B82F6", "Load Board":"#8B5CF6", Other:"#6B7280" };
+
+  function del(id) { if(!confirm("Delete contact?")) return; setContacts(prev=>prev.filter(c=>c.id!==id)); }
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div>
+          <p style={{ fontWeight:900, fontSize:16 }}>📋 Contacts & Relationships</p>
+          <p style={{ color:"var(--muted)", fontSize:12 }}>{contacts.filter(c=>c.type==="Shipper").length} Shippers · {contacts.filter(c=>c.type==="Carrier").length} Carriers · {contacts.filter(c=>c.type==="Broker").length} Brokers</p>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <select value={typeF} onChange={e=>setTypeF(e.target.value)} style={{ ...inp, width:"auto", fontSize:12, padding:"6px 10px" }}>
+            {["all","Shipper","Broker","Carrier","Load Board","Other"].map(t=><option key={t} value={t}>{t==="all"?"All Types":t}</option>)}
+          </select>
+          <button onClick={()=>setShowAdd(true)} style={{ background:"#1d4ed8", border:"none", color:"#fff", padding:"8px 16px", borderRadius:8, fontWeight:700, fontSize:13 }}>+ Add Contact</button>
+        </div>
+      </div>
+      <div className="grid-3col" style={{ gap:10 }}>
+        {filtered.map(c=>(
+          <Card key={c.id}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+              <div>
+                <p style={{ fontWeight:700, fontSize:14 }}>{c.company}</p>
+                <Badge label={c.type} color={typeColor[c.type]||"#6B7280"} small />
+              </div>
+              <div style={{ display:"flex", gap:4 }}>
+                <button onClick={()=>setEditing(c)} style={{ fontSize:11, padding:"3px 8px", background:"var(--bg-subtle)", border:"none", color:"#9CA3AF", borderRadius:6 }}>Edit</button>
+                <button onClick={()=>del(c.id)} style={{ fontSize:11, padding:"3px 8px", background:"var(--bg-subtle)", border:"none", color:"#EF4444", borderRadius:6 }}>✕</button>
+              </div>
+            </div>
+            {c.contact && <p style={{ fontSize:12, color:"#9CA3AF", marginBottom:2 }}>{c.contact}</p>}
+            {c.phone && <p style={{ fontSize:12, color:"var(--muted)" }}>📞 {c.phone}</p>}
+            {c.email && <p style={{ fontSize:12, color:"var(--muted)" }}>✉️ {c.email}</p>}
+            {c.loads>0 && <p style={{ fontSize:11, color:"var(--dim)", marginTop:4 }}>{c.loads} loads dispatched</p>}
+            {c.notes && <p style={{ fontSize:11, color:"var(--dim)", marginTop:4, paddingTop:4, borderTop:"1px solid var(--border)" }}>{c.notes}</p>}
+          </Card>
+        ))}
+      </div>
+      {(showAdd||editing) && <ContactModal contact={editing} onClose={()=>{setShowAdd(false);setEditing(null);}} setContacts={setContacts} />}
+    </div>
+  );
+}
+
+function ContactModal({ contact, onClose, setContacts }) {
+  const [f, setF] = useState(contact||{ company:"", contact:"", phone:"", email:"", type:"Shipper", loads:0, notes:"" });
+  const s = (k,v) => setF(p=>({...p,[k]:v}));
+  function save() {
+    if (!f.company) return alert("Company name required");
+    if (contact) setContacts(prev=>prev.map(c=>c.id===contact.id?{...f,id:contact.id}:c));
+    else setContacts(prev=>[...prev,{...f,id:Date.now()}]);
+    onClose();
+  }
+  return (
+    <Modal title={contact?"Edit Contact":"Add Contact"} onClose={onClose}>
+      <Field label="Company Name *"><input style={inp} value={f.company} onChange={e=>s("company",e.target.value)} placeholder="ABC Logistics" /></Field>
+      <Field label="Contact Person"><input style={inp} value={f.contact} onChange={e=>s("contact",e.target.value)} placeholder="John Smith" /></Field>
+      <Field label="Type">
+        <select style={inp} value={f.type} onChange={e=>s("type",e.target.value)}>
+          {["Shipper","Broker","Carrier","Load Board","Other"].map(t=><option key={t} value={t}>{t}</option>)}
+        </select>
+      </Field>
+      <Field label="Phone"><input style={inp} value={f.phone} onChange={e=>s("phone",e.target.value)} placeholder="800-555-0000" /></Field>
+      <Field label="Email"><input style={inp} value={f.email} onChange={e=>s("email",e.target.value)} placeholder="contact@company.com" /></Field>
+      <Field label="Notes"><textarea style={{ ...inp, height:70, resize:"vertical" }} value={f.notes} onChange={e=>s("notes",e.target.value)} /></Field>
+      <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"flex-end" }}>
+        <button onClick={onClose} style={{ padding:"8px 16px", borderRadius:8, border:"1px solid var(--border-hi)", background:"none", color:"#9CA3AF" }}>Cancel</button>
+        <button onClick={save} style={{ padding:"8px 20px", borderRadius:8, border:"none", background:"#1d4ed8", color:"#fff", fontWeight:700 }}>Save</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ════════════════════════════════════════
+//  TASKS
+// ════════════════════════════════════════
+// ════════════════════════════════════════
+//  SUB-NAV HELPER
+// ════════════════════════════════════════
+function SubNav({ tabs, active, onSelect }) {
+  return (
+    <div style={{ display:"flex", gap:4, marginBottom:16, borderBottom:"1px solid var(--border)", paddingBottom:8, flexWrap:"wrap" }}>
+      {tabs.map(t => (
+        <button key={t.id} onClick={() => onSelect(t.id)}
+          style={{ padding:"7px 16px", borderRadius:8, fontSize:13, fontWeight:700, border:"none", whiteSpace:"nowrap",
+            background: active===t.id ? "#1d4ed8" : "var(--bg-subtle)",
+            color: active===t.id ? "#fff" : "var(--muted)" }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  OPERATIONS TAB  (Dispatch + Loads)
+// ════════════════════════════════════════
+function OperationsTab({ loads, setLoads, drivers }) {
+  const [sub, setSub] = useState("dispatch");
+  const SUB = [
+    { id:"dispatch", label:"📡 Dispatch Board" },
+    { id:"loads",    label:"📦 All Loads" },
+  ];
+  return (
+    <div>
+      <SubNav tabs={SUB} active={sub} onSelect={setSub} />
+      {sub === "dispatch" && <DispatchTab loads={loads} setLoads={setLoads} drivers={drivers} />}
+      {sub === "loads"    && <LoadsTab    loads={loads} setLoads={setLoads} drivers={drivers} />}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  PEOPLE TAB  (Pipeline + Roster + Contacts)
+// ════════════════════════════════════════
+function PeopleTab({ drivers, setDrivers, contacts, setContacts }) {
+  const [sub, setSub] = useState("pipeline");
+  const SUB = [
+    { id:"pipeline",  label:"🔄 OO Pipeline" },
+    { id:"roster",    label:"👥 Driver Roster" },
+    { id:"contacts",  label:"📋 Contacts" },
+  ];
+  return (
+    <div>
+      <SubNav tabs={SUB} active={sub} onSelect={setSub} />
+      {sub === "pipeline" && <PipelineTab  drivers={drivers} setDrivers={setDrivers} setTab={() => {}} />}
+      {sub === "roster"   && <DriversTab   drivers={drivers} setDrivers={setDrivers} />}
+      {sub === "contacts" && <ContactsTab  contacts={contacts} setContacts={setContacts} />}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  FINANCE + COMPLIANCE TAB
+// ════════════════════════════════════════
+function FinanceComplianceTab({ loads, setLoads, drivers, ooFees, brokerProfit, totalProfit, brokerLoads, setBrokerLoads, alerts }) {
+  const [sub, setSub] = useState("finance");
+  const SUB = [
+    { id:"finance",    label:"💰 Finance" },
+    { id:"compliance", label:"🛡️ Compliance" },
+  ];
+
+  const red    = alerts.filter(a => a.sev==="red");
+  const yellow = alerts.filter(a => a.sev==="yellow");
+
+  return (
+    <div>
+      {/* Compliance alert banner — always visible at the top */}
+      {alerts.length > 0 && (
+        <div style={{ borderRadius:12, border:`1px solid ${red.length>0?"#991b1b":"#92400e"}`, background:red.length>0?"rgba(127,29,29,0.25)":"rgba(67,20,7,0.25)", padding:"12px 16px", marginBottom:16 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8, marginBottom: alerts.length>0 ? 8 : 0 }}>
+            <p style={{ fontWeight:900, fontSize:14, color: red.length>0?"#fca5a5":"#fcd34d" }}>
+              {red.length>0 ? "⚠️" : "🟡"} Compliance Alerts
+            </p>
+            <div style={{ display:"flex", gap:8 }}>
+              {red.length>0    && <span style={{ fontSize:12, color:"#fca5a5", fontWeight:700, background:"#7f1d1d", padding:"2px 10px", borderRadius:8 }}>🔴 {red.length} Critical</span>}
+              {yellow.length>0 && <span style={{ fontSize:12, color:"#fcd34d", fontWeight:700, background:"#431407", padding:"2px 10px", borderRadius:8 }}>🟡 {yellow.length} Warning</span>}
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+            {alerts.map((a,i) => (
+              <span key={i} style={{ fontSize:11, color: a.sev==="red"?"#fca5a5":"#fcd34d" }}>
+                {a.sev==="red"?"🔴":"🟡"} <strong>{a.driver}</strong> — {a.type}: {a.days!=null ? daysLabel(a.days) : a.note}
+              </span>
+            ))}
+          </div>
+          <button onClick={() => setSub("compliance")} style={{ marginTop:8, fontSize:11, fontWeight:700, color:"#9CA3AF", background:"none", border:"1px solid var(--border-hi)", borderRadius:6, padding:"3px 10px", cursor:"pointer" }}>
+            View full compliance details →
+          </button>
+        </div>
+      )}
+      {alerts.length === 0 && (
+        <div style={{ borderRadius:10, border:"1px solid #065f46", background:"rgba(6,78,59,0.2)", padding:"10px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
+          <span style={{ fontSize:16 }}>✅</span>
+          <p style={{ fontSize:13, color:"#34d399", fontWeight:700 }}>All drivers compliant — no expiring documents</p>
+        </div>
+      )}
+
+      <SubNav tabs={SUB} active={sub} onSelect={setSub} />
+      {sub === "finance"    && <FinanceTab    loads={loads} setLoads={setLoads} drivers={drivers} ooFees={ooFees} brokerProfit={brokerProfit} totalProfit={totalProfit} brokerLoads={brokerLoads} setBrokerLoads={setBrokerLoads} />}
+      {sub === "compliance" && <ComplianceTab drivers={drivers} alerts={alerts} />}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  TASK PRIORITY PANEL (Overview)
+// ════════════════════════════════════════
+function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly }) {
+  const [collapsed, setCollapsed] = useState({ urgent:false, asap:false, normal:false });
+  const [showAdd, setShowAdd] = useState(null);
+  const [form, setForm] = useState({ text:"", dept:"", person:"" });
+
+  const ALL_TIERS = [
+    { key:"urgent", label:"URGENT", emoji:"🔴", color:"#EF4444", headerBg:"rgba(127,29,29,0.35)", desc:"Needs to be done immediately" },
+    { key:"asap",   label:"ASAP",   emoji:"🟡", color:"#F59E0B", headerBg:"rgba(67,20,7,0.45)",  desc:"Needs to be done today" },
+    { key:"normal", label:"NORMAL", emoji:"🟢", color:"#10B981", headerBg:"rgba(6,78,59,0.35)",  desc:"Needs to be done soon" },
+  ];
+  const TIERS = tiersOnly ? ALL_TIERS.filter(t => tiersOnly.includes(t.key)) : ALL_TIERS;
+  const DEPTS = tasks.map(t => t.role);
+
+  const urgentAsapTotal = tiersOnly
+    ? priorityTasks.filter(t => tiersOnly.includes(t.priority) && !t.done).length
+    : null;
+
+  function toggleDone(id) {
+    setPriorityTasks(prev => prev.map(t => t.id===id ? {...t, done:!t.done} : t));
+  }
+  function delTask(id) {
+    setPriorityTasks(prev => prev.filter(t => t.id!==id));
+  }
+  function addTask(priority) {
+    if (!form.text.trim()) return;
+    setPriorityTasks(prev => [...prev, {
+      id: "pt_"+Date.now(),
+      text: form.text.trim(),
+      dept: form.dept,
+      person: form.person.trim(),
+      priority,
+      done: false,
+    }]);
+    setForm({ text:"", dept:"", person:"" });
+    setShowAdd(null);
+  }
+
+  return (
+    <Card>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <p style={{ fontWeight:900, fontSize:15 }}>🎯 Priority Tasks</p>
+        {tiersOnly && urgentAsapTotal === 0 && (
+          <span style={{ fontSize:11, color:"#10B981", fontWeight:700, background:"#064e3b", padding:"2px 10px", borderRadius:8 }}>✅ All clear</span>
+        )}
+        {tiersOnly && urgentAsapTotal > 0 && (
+          <span style={{ fontSize:11, color:"#EF4444", fontWeight:800, background:"#7f1d1d", padding:"2px 10px", borderRadius:8 }}>
+            {urgentAsapTotal} need action
+          </span>
+        )}
+      </div>
+      {tiersOnly && urgentAsapTotal === 0 && (
+        <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"18px 0 10px" }}>
+          No urgent or ASAP tasks right now — go build something great.
+        </p>
+      )}
+      <div style={{ display:"grid", gap:12 }}
+           className={TIERS.length === 3 ? "grid-3col" : "grid-2col"}>
+        {TIERS.map(tier => {
+          const all    = priorityTasks.filter(t => t.priority===tier.key);
+          const active = all.filter(t => !t.done);
+          const done   = all.filter(t => t.done);
+          const sorted = [...active, ...done];
+          const isCollapsed = collapsed[tier.key];
+
+          return (
+            <div key={tier.key} style={{ background:"var(--bg-subtle)", borderRadius:12, border:`1px solid ${tier.color}44`, overflow:"hidden", display:"flex", flexDirection:"column" }}>
+
+              {/* ── Tier header (collapsible) ── */}
+              <div
+                onClick={() => setCollapsed(prev => ({...prev, [tier.key]:!isCollapsed}))}
+                style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", cursor:"pointer", background:tier.headerBg, userSelect:"none" }}
+                onMouseEnter={e => e.currentTarget.style.filter="brightness(1.2)"}
+                onMouseLeave={e => e.currentTarget.style.filter="brightness(1)"}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:16 }}>{tier.emoji}</span>
+                  <div>
+                    <p style={{ fontWeight:900, fontSize:12, color:tier.color, letterSpacing:"0.05em" }}>{tier.label}</p>
+                    <p style={{ fontSize:10, color:"var(--muted)", marginTop:1 }}>{tier.desc}</p>
+                  </div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ background:tier.color+"22", color:tier.color, fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:10 }}>
+                    {active.length}
+                  </span>
+                  <span style={{ color:"var(--muted)", fontSize:13, fontWeight:700 }}>{isCollapsed ? "▸" : "▾"}</span>
+                </div>
+              </div>
+
+              {/* ── Task list ── */}
+              {!isCollapsed && (
+                <div style={{ padding:"8px 10px", flex:1 }}>
+                  {sorted.length === 0 && (
+                    <p style={{ color:"var(--muted)", fontSize:12, textAlign:"center", padding:"12px 0" }}>No tasks</p>
+                  )}
+                  {sorted.map(t => (
+                    <div key={t.id}
+                      style={{ display:"flex", alignItems:"flex-start", gap:8, padding:"8px 6px", borderRadius:8, marginBottom:2,
+                        opacity: t.done ? 0.4 : 1, transition:"opacity 0.2s" }}>
+                      {/* Checkbox */}
+                      <div
+                        onClick={() => toggleDone(t.id)}
+                        style={{ width:18, height:18, borderRadius:4, border:`2px solid ${t.done ? tier.color : "#374151"}`,
+                          background: t.done ? tier.color : "transparent",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          flexShrink:0, cursor:"pointer", marginTop:2 }}>
+                        {t.done && <span style={{ color:"#fff", fontSize:10, fontWeight:900 }}>✓</span>}
+                      </div>
+                      {/* Text + meta */}
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <p style={{ fontSize:12, fontWeight:600, lineHeight:1.35,
+                          color: t.done ? "var(--muted)" : "var(--text)",
+                          textDecoration: t.done ? "line-through" : "none" }}>
+                          {t.text}
+                        </p>
+                        <div style={{ display:"flex", gap:4, marginTop:3, flexWrap:"wrap", alignItems:"center" }}>
+                          {t.dept && (
+                            <span style={{ fontSize:10, background:"var(--border)", color:"var(--muted)",
+                              padding:"1px 6px", borderRadius:3, fontWeight:600 }}>
+                              {t.dept}
+                            </span>
+                          )}
+                          {t.person && (
+                            <span style={{ fontSize:10, color:"var(--dim)" }}>👤 {t.person}</span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Delete */}
+                      <button
+                        onClick={() => delTask(t.id)}
+                        style={{ background:"none", border:"none", color:"var(--dim)", fontSize:13,
+                          cursor:"pointer", padding:"0 2px", flexShrink:0, opacity:0.4, lineHeight:1 }}
+                        onMouseEnter={e => { e.target.style.opacity=1; e.target.style.color="#EF4444"; }}
+                        onMouseLeave={e => { e.target.style.opacity=0.4; e.target.style.color="var(--dim)"; }}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add task button */}
+                  <button
+                    onClick={() => { setShowAdd(tier.key); setForm({ text:"", dept:"", person:"" }); }}
+                    style={{ width:"100%", marginTop:6, padding:"7px 0", border:"1px dashed #374151",
+                      borderRadius:8, background:"transparent", color:"var(--dim)", fontSize:11, cursor:"pointer" }}
+                    onMouseEnter={e => { e.target.style.borderColor="#6B7280"; e.target.style.color="#9CA3AF"; }}
+                    onMouseLeave={e => { e.target.style.borderColor="#374151"; e.target.style.color="var(--dim)"; }}>
+                    + Add task
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Add Task Modal ── */}
+      {showAdd && (
+        <Modal
+          title={`Add ${showAdd === "urgent" ? "🔴 URGENT" : showAdd === "asap" ? "🟡 ASAP" : "🟢 NORMAL"} Task`}
+          onClose={() => setShowAdd(null)}>
+          <Field label="TASK">
+            <input
+              style={inp} autoFocus
+              value={form.text}
+              onChange={e => setForm(f => ({...f, text:e.target.value}))}
+              onKeyDown={e => e.key==="Enter" && addTask(showAdd)}
+              placeholder="What needs to be done?" />
+          </Field>
+          <div className="form-grid">
+            <Field label="DEPARTMENT">
+              <select style={inp} value={form.dept} onChange={e => setForm(f => ({...f, dept:e.target.value}))}>
+                <option value="">— Select —</option>
+                {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </Field>
+            <Field label="ASSIGNED TO">
+              <input
+                style={inp}
+                value={form.person}
+                onChange={e => setForm(f => ({...f, person:e.target.value}))}
+                placeholder="Person's name" />
+            </Field>
+          </div>
+          <div style={{ display:"flex", gap:8, marginTop:20, justifyContent:"flex-end" }}>
+            <button
+              onClick={() => setShowAdd(null)}
+              style={{ padding:"8px 16px", borderRadius:8, border:"1px solid var(--border-hi)", background:"none", color:"#9CA3AF" }}>
+              Cancel
+            </button>
+            <button
+              onClick={() => addTask(showAdd)}
+              style={{ padding:"8px 22px", borderRadius:8, border:"none", background:"#1d4ed8", color:"#fff", fontWeight:700 }}>
+              Add Task
+            </button>
+          </div>
+        </Modal>
+      )}
+    </Card>
+  );
+}
+
+function TasksTab({ tasks, setTasks }) {
+  const [sel, setSel] = useState(0);
+  const [newText, setNewText] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [newRole, setNewRole] = useState("");
+  const [addingRole, setAddingRole] = useState(false);
+
+  function toggle(pIdx, id) {
+    setTasks(prev=>prev.map((p,i)=>i!==pIdx?p:{ ...p, tasks:p.tasks.map(t=>t.id===id?{...t,done:!t.done}:t) }));
+  }
+  function del(pIdx, id) {
+    setTasks(prev=>prev.map((p,i)=>i!==pIdx?p:{ ...p, tasks:p.tasks.filter(t=>t.id!==id) }));
+  }
+  function addTask() {
+    if (!newText.trim()) return;
+    setTasks(prev=>prev.map((p,i)=>i!==sel?p:{ ...p, tasks:[...p.tasks,{ id:"t_"+Date.now(), text:newText.trim(), done:false }] }));
+    setNewText(""); setAdding(false);
+  }
+  function addRole() {
+    if (!newRole.trim()) return;
+    const colors=["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899"];
+    setTasks(prev=>[...prev,{ role:newRole.trim(), color:colors[prev.length%colors.length], emoji:"👤", tasks:[] }]);
+    setNewRole(""); setAddingRole(false);
+  }
+
+  const cp = tasks[sel];
+  const done = cp ? cp.tasks.filter(t=>t.done).length : 0;
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <p style={{ fontWeight:900, fontSize:16 }}>✅ Team Task Board</p>
+        <button onClick={()=>setAddingRole(true)} style={{ fontSize:12, padding:"6px 12px", background:"var(--bg-subtle)", border:"1px solid var(--border-hi)", color:"#9CA3AF", borderRadius:8 }}>+ Add Role</button>
+      </div>
+
+      <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
+        {tasks.map((p,i) => {
+          const d=p.tasks.filter(t=>t.done).length;
+          const pct=p.tasks.length?(d/p.tasks.length)*100:0;
+          return (
+            <button key={i} onClick={()=>setSel(i)} style={{ borderRadius:12, padding:"10px 14px", border: i===sel?`2px solid ${p.color}`:"1px solid var(--border)", background: i===sel?p.color+"18":"var(--bg-card)", textAlign:"left", minWidth:120 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:4, marginBottom:4 }}>
+                <span style={{ fontSize:14 }}>{p.emoji}</span>
+                <span style={{ fontSize:12, fontWeight:700, color: i===sel?p.color:"var(--muted)" }}>{p.role}</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <div style={{ flex:1, height:4, background:"var(--bg-subtle)", borderRadius:2 }}>
+                  <div style={{ width:pct+"%", height:4, background:p.color, borderRadius:2 }} />
+                </div>
+                <span style={{ fontSize:10, color:"var(--dim)" }}>{d}/{p.tasks.length}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {cp && (
+        <Card>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:28 }}>{cp.emoji}</span>
+              <div>
+                <p style={{ fontWeight:900, color:cp.color, fontSize:16 }}>{cp.role}</p>
+                <p style={{ fontSize:12, color:"var(--muted)" }}>Click tasks to complete</p>
+              </div>
+            </div>
+            <span style={{ fontSize:28, fontWeight:900, color:cp.color }}>{done}/{cp.tasks.length}</span>
+          </div>
+
+          {cp.tasks.map(t=>(
+            <div key={t.id} onClick={()=>toggle(sel,t.id)}
+              style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 8px", borderRadius:8, cursor:"pointer", marginBottom:2 }}
+              onMouseEnter={e=>e.currentTarget.style.background="#1f2937"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{ width:24, height:24, borderRadius:6, border:`2px solid ${t.done?cp.color:"#374151"}`, background:t.done?cp.color:"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                {t.done && <span style={{ color:"#fff", fontSize:13 }}>✓</span>}
+              </div>
+              <span style={{ flex:1, fontSize:14, color:t.done?"#4B5563":"#e5e7eb", textDecoration:t.done?"line-through":"none" }}>{t.text}</span>
+              <button onClick={e=>{ e.stopPropagation(); del(sel,t.id); }}
+                style={{ opacity:0.3, border:"none", background:"none", color:"var(--muted)", fontSize:16, padding:4 }}
+                onMouseEnter={e=>{e.target.style.opacity=1;e.target.style.color="#EF4444";}}
+                onMouseLeave={e=>{e.target.style.opacity=0.3;e.target.style.color="#6B7280";}}>✕</button>
+            </div>
+          ))}
+
+          {adding ? (
+            <div style={{ marginTop:8, display:"flex", gap:8 }}>
+              <input value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} placeholder="Type task and press Enter..." autoFocus style={inp} />
+              <button onClick={addTask} style={{ padding:"8px 16px", borderRadius:8, border:"none", background:cp.color, color:"#fff", fontWeight:700 }}>Add</button>
+              <button onClick={()=>{setAdding(false);setNewText("");}} style={{ background:"none", border:"none", color:"var(--muted)", fontSize:16 }}>✕</button>
+            </div>
+          ) : (
+            <button onClick={()=>setAdding(true)}
+              style={{ marginTop:8, width:"100%", padding:10, border:"1px dashed #374151", borderRadius:8, background:"transparent", color:"var(--dim)", fontSize:13 }}
+              onMouseEnter={e=>{e.target.style.borderColor="#6B7280";e.target.style.color="#9CA3AF";}}
+              onMouseLeave={e=>{e.target.style.borderColor="#374151";e.target.style.color="#4B5563";}}>
+              + Add Task
+            </button>
+          )}
+        </Card>
+      )}
+
+      {addingRole && (
+        <Modal title="Add New Department" onClose={()=>setAddingRole(false)}>
+          <Field label="Department Name"><input style={inp} value={newRole} onChange={e=>setNewRole(e.target.value)} placeholder="e.g. Safety, IT, HR" autoFocus /></Field>
+          <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"flex-end" }}>
+            <button onClick={()=>setAddingRole(false)} style={{ padding:"8px 16px", borderRadius:8, border:"1px solid var(--border-hi)", background:"none", color:"#9CA3AF" }}>Cancel</button>
+            <button onClick={addRole} style={{ padding:"8px 20px", borderRadius:8, border:"none", background:"#1d4ed8", color:"#fff", fontWeight:700 }}>Add</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>
 </html>
