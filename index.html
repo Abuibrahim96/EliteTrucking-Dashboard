@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- Elite Trucking Lanes HQ — last updated 2026-04-03 -->
+<!-- Elite Trucking Dashboard — last updated 2026-04-03 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Elite Trucking Lanes — HQ</title>
+<title>Elite Trucking Dashboard</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -491,7 +491,7 @@ function OverviewTab({ drivers, loads, tasks, ooFees, brokerProfit, totalProfit,
   if (drivers.length === 0) return (
     <div style={{ maxWidth:560, margin:"60px auto", textAlign:"center" }}>
       <p style={{ fontSize:48, marginBottom:16 }}>🚛</p>
-      <p style={{ fontWeight:900, fontSize:22, marginBottom:8 }}>Welcome to Elite Trucking Lanes HQ</p>
+      <p style={{ fontWeight:900, fontSize:22, marginBottom:8 }}>Welcome to Elite Trucking Dashboard</p>
       <p style={{ color:"var(--muted)", fontSize:14, marginBottom:32, lineHeight:1.6 }}>No data yet. Start by adding your first driver — once you have drivers and loads entered, this dashboard will show your live numbers.</p>
       <div className="grid-3col" style={{ gap:12, marginBottom:32 }}>
         {[
