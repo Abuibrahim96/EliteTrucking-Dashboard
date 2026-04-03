@@ -268,8 +268,26 @@ function Dashboard({ session }) {
   const [priorityTasks,  _setPriorityTasks]  = useState([]);
   const [theme, setTheme] = useLs("etl_theme", "dark");
   const [dbReady, setDbReady] = useState(false);
+  const [showMotivation, setShowMotivation] = useState(false);
+  const [hasSeenMotivation, setHasSeenMotivation] = useState(false);
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  const [toasts, setToasts] = useState([]);
   const isDark = theme === "dark";
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
+
+  const quotes = [
+    "Move freight. Move money. Move forward.",
+    "The open road doesn't wait — neither should you.",
+    "Every load delivered is momentum earned.",
+    "Hustle like a driver on a tight ETA.",
+    "Win the day by clearing the board first.",
+  ];
+
+  function pushToast(message, variant = "info") {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    setToasts(prev => [...prev, { id, message, variant }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 6000);
+  }
 
   // ── Initial load ──────────────────────
   useEffect(() => {
@@ -368,14 +386,44 @@ function Dashboard({ session }) {
   const redAlerts = alerts.filter(a => a.sev==="red");
 
   const urgentCount = priorityTasks.filter(t => t.priority==="urgent" && !t.done).length;
+  const urgentAsapCount = priorityTasks.filter(t => ["urgent","asap"].includes(t.priority) && !t.done).length;
 
   const TABS = [
     { id:"overview",    label:"🏠 Overview" },
-    { id:"operations",  label:"📡 Operations" },
-    { id:"people",      label:"👥 Drivers" },
-    { id:"finance",     label:"💰 Finance" },
     { id:"tasks",       label:"✅ Tasks" },
+    { id:"operations",  label:"📡 Operations" },
+    { id:"people",      label:"👥 People" },
+    { id:"finance",     label:"💰 Finance" },
   ];
+
+  // ── Motivational modal on first load ──
+  useEffect(() => {
+    if (!dbReady || hasSeenMotivation) return;
+    setShowMotivation(true);
+    const dismiss = setTimeout(() => setShowMotivation(false), 3500);
+    setHasSeenMotivation(true);
+    return () => clearTimeout(dismiss);
+  }, [dbReady, hasSeenMotivation]);
+
+  // ── Rotate motivational quote while modal is open ──
+  useEffect(() => {
+    if (!showMotivation) return;
+    const cycle = setInterval(() => setQuoteIndex(idx => (idx + 1) % quotes.length), 1400);
+    return () => clearInterval(cycle);
+  }, [showMotivation]);
+
+  // ── 2-hour urgent task reminder toasts ──
+  useEffect(() => {
+    if (!dbReady) return;
+    const timer = setInterval(() => {
+      if (urgentCount > 0) {
+        pushToast(`You still have ${urgentCount} urgent tasks — let's go!`, "info");
+      } else {
+        pushToast("🔥 All urgent tasks cleared! Keep pushing.", "success");
+      }
+    }, 7200000);
+    return () => clearInterval(timer);
+  }, [dbReady, urgentCount]);
 
   if (!dbReady) return (
     <div data-theme={theme} style={{ minHeight:"100vh", background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:12 }}>
@@ -386,6 +434,32 @@ function Dashboard({ session }) {
 
   return (
     <div data-theme={theme} style={{ minHeight:"100vh", background:"var(--bg)", color:"var(--text)", fontFamily:"system-ui,sans-serif" }}>
+      {showMotivation && (
+        <div style={{ position:"fixed", inset:0, zIndex:1100, background:"rgba(3,7,18,0.95)", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+          <div style={{ width:"100%", maxWidth:560, borderRadius:24, background:"var(--bg-card)", padding:32, textAlign:"center", boxShadow:"0 24px 80px rgba(0,0,0,0.35)" }}>
+            <p style={{ fontSize:12, fontWeight:700, color:"#10B981", letterSpacing:"0.22em", marginBottom:12 }}>WELCOME BACK</p>
+            <p style={{ fontSize:28, fontWeight:900, marginBottom:12 }}>Let's Get It Done 💪</p>
+            <p style={{ fontSize:16, marginBottom:24, color:"var(--muted)", lineHeight:1.5 }}>
+              {urgentAsapCount > 0 ? `${urgentAsapCount} urgent / ASAP task${urgentAsapCount!==1?"s":""} waiting` : "No urgent tasks waiting — stay sharp."}
+            </p>
+            <div style={{ marginBottom:24, padding:"18px 20px", borderRadius:18, background:"rgba(14,116,144,0.08)", border:"1px solid rgba(14,116,144,0.18)" }}>
+              <p style={{ fontSize:15, color:"var(--text)", fontWeight:700, marginBottom:8 }}>“{quotes[quoteIndex]}”</p>
+              <p style={{ fontSize:12, color:"var(--muted)" }}>Road, freight, and hustle energy for the day.</p>
+            </div>
+            <button onClick={() => setShowMotivation(false)} style={{ border:"none", borderRadius:12, padding:"14px 24px", background:"#1d4ed8", color:"#fff", fontSize:14, fontWeight:700 }}>Let's Get It Done 💪</button>
+          </div>
+        </div>
+      )}
+      {toasts.length > 0 && (
+        <div style={{ position:"fixed", right:16, bottom:16, zIndex:1200, display:"flex", flexDirection:"column", gap:10, alignItems:"flex-end" }}>
+          {toasts.map(t => (
+            <div key={t.id} style={{ minWidth:260, maxWidth:320, borderRadius:14, padding:"12px 14px", boxShadow:"0 18px 40px rgba(0,0,0,0.2)", background:t.variant==="success"?"#0f766e":"#111827", border:`1px solid ${t.variant==="success"?"#10B981":"#0f172a"}` }}>
+              <p style={{ fontSize:13, fontWeight:700, color:t.variant==="success"?"#bbf7d0":"#93c5fd", marginBottom:4 }}>{t.variant==="success"?"✅ Great news":"⏱️ Reminder"}</p>
+              <p style={{ fontSize:13, color:"var(--text)", lineHeight:1.4 }}>{t.message}</p>
+            </div>
+          ))}
+        </div>
+      )}
       {/* NAV */}
       <div style={{ background:"var(--bg-nav)", borderBottom:"1px solid var(--border)", padding:"0 16px", position:"sticky", top:0, zIndex:100 }}>
         <div style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", gap:12, height:52 }}>
