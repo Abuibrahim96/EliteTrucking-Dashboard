@@ -53,23 +53,55 @@ table { border-spacing: 0; border-collapse: collapse; }
   50%       { box-shadow: 0 0 20px 4px rgba(239,68,68,0.2); }
 }
 .pulse-dot {
-  display: inline-block;
-  width: 9px; height: 9px;
-  background: #EF4444;
-  border-radius: 50%;
-  animation: pulse-dot 1.1s ease-in-out infinite;
-  flex-shrink: 0;
+  display: inline-block; width: 9px; height: 9px;
+  background: #EF4444; border-radius: 50%;
+  animation: pulse-dot 1.1s ease-in-out infinite; flex-shrink: 0;
 }
 .urgent-glow { animation: urgent-border 2s ease-in-out infinite; }
 
-/* ── Responsive layout classes ── */
-.grid-kpi   { display: grid; gap: 8px; }
-.grid-2col  { display: grid; gap: 16px; }
-.form-grid  { display: grid; gap: 12px; }
-.kanban     { display: grid; gap: 10px; overflow-x: auto; }
-.table-scroll { overflow-x: auto; border-radius: 12px; }
+/* ── Layout grid classes ── */
+.grid-kpi    { display: grid; gap: 8px; }
+.grid-2col   { display: grid; gap: 16px; }
+.form-grid   { display: grid; gap: 12px; }
+.kanban      { display: grid; gap: 10px; overflow-x: auto; }
+.table-scroll { overflow-x: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
 
-/* Desktop */
+/* ── Navigation ── */
+.nav-inner {
+  display: flex; align-items: center; gap: 12px; height: 52px;
+  max-width: 1200px; margin: 0 auto;
+}
+.nav-tabs {
+  display: flex; gap: 2px; flex: 1;
+  overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.nav-tabs::-webkit-scrollbar { display: none; }
+.nav-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ── Sub-navigation: always a single scrollable row ── */
+.subnav-row {
+  display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; border-bottom: 1px solid var(--border);
+  padding-bottom: 8px; margin-bottom: 16px;
+}
+.subnav-row::-webkit-scrollbar { display: none; }
+.subnav-btn { flex-shrink: 0; white-space: nowrap; }
+
+/* ── Modal ── */
+.modal-box {
+  background: var(--bg-card); border: 1px solid var(--border-hi); border-radius: 16px;
+  padding: 24px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto;
+}
+.modal-box.wide { max-width: 720px; }
+
+/* ── Toast notifications ── */
+.toast-stack {
+  position: fixed; right: 16px; bottom: 16px; z-index: 1200;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+}
+.toast-card { min-width: 260px; max-width: 320px; border-radius: 14px; padding: 12px 14px; box-shadow: 0 18px 40px rgba(0,0,0,0.2); }
+
+/* ── Desktop (≥769px) ── */
 @media (min-width: 769px) {
   .grid-kpi-top    { grid-template-columns: repeat(4, 1fr); }
   .grid-kpi-bottom { grid-template-columns: repeat(4, 1fr); }
@@ -80,17 +112,45 @@ table { border-spacing: 0; border-collapse: collapse; }
   .kanban-4        { grid-template-columns: repeat(4, minmax(200px, 1fr)); }
 }
 
-/* Mobile */
+/* ── Mobile (≤768px) ── */
 @media (max-width: 768px) {
+  /* Grids */
   .grid-kpi-top, .grid-kpi-bottom { grid-template-columns: repeat(2, 1fr); }
   .grid-2col, .grid-3col          { grid-template-columns: 1fr; }
   .form-grid                       { grid-template-columns: 1fr; }
   .form-full                       { grid-column: 1 / -1 !important; }
-  .kanban-5, .kanban-4             { grid-auto-flow: column; grid-auto-columns: 80vw; }
+  .kanban-5, .kanban-4             { grid-auto-flow: column; grid-auto-columns: min(90vw, 300px); }
   .hide-mobile                     { display: none !important; }
   .nav-brand p:last-child          { display: none; }
-  .tab-label-short::after { content: attr(data-short); }
-  .tab-label-short span   { display: none; }
+
+  /* Nav: 2-row layout — tabs drop to their own full-width row */
+  .nav-inner    { flex-wrap: wrap; height: auto; padding: 6px 0 0; gap: 0; }
+  .nav-tabs     { order: 2; width: 100%; padding: 4px 0 8px; flex: none; }
+  .nav-controls { gap: 6px; }
+
+  /* Modal: tighter fit, safe inset */
+  .modal-box      { padding: 16px; border-radius: 12px; max-height: 88vh; max-width: calc(100vw - 24px); }
+  .modal-box.wide { max-width: calc(100vw - 24px); }
+
+  /* Toast: stretch full width with safe insets */
+  .toast-stack { left: 8px; right: 8px; bottom: 8px; align-items: stretch; }
+  .toast-card  { min-width: unset; max-width: 100%; }
+
+  /* Tables: smaller cells, always nowrap so horizontal scroll is intentional */
+  .table-scroll table { font-size: 12px; }
+  .table-scroll th    { padding: 8px 6px; font-size: 10px; white-space: nowrap; }
+  .table-scroll td    { padding: 8px 6px; white-space: nowrap; }
+
+  /* Touch targets */
+  button         { min-height: 40px; }
+  input, select  { min-height: 44px; font-size: 16px; } /* 16px prevents iOS auto-zoom */
+  textarea       { font-size: 16px; }
+
+  /* Motivational modal card */
+  .motivation-card { padding: 20px !important; }
+
+  /* Priority task items */
+  .priority-item { padding: 10px 12px !important; gap: 10px !important; }
 }
 </style>
 </head>
@@ -133,11 +193,11 @@ function Card({ children, style }) {
 }
 function Modal({ title, onClose, children, wide }) {
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"var(--bg-card)", border:"1px solid var(--border-hi)", borderRadius:16, padding:24, width:"100%", maxWidth:wide?720:460, maxHeight:"90vh", overflowY:"auto" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+      <div className={wide ? "modal-box wide" : "modal-box"}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <p style={{ fontWeight:900, fontSize:16 }}>{title}</p>
-          <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--muted)", fontSize:20 }}>✕</button>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--muted)", fontSize:20, minHeight:"unset", padding:"4px 8px" }}>✕</button>
         </div>
         {children}
       </div>
@@ -150,7 +210,7 @@ function Field({ label, children }) {
     {children}
   </div>;
 }
-const inp = { width:"100%", background:"var(--bg-subtle)", border:"1px solid var(--border-hi)", borderRadius:8, padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none" };
+const inp = { width:"100%", background:"var(--bg-subtle)", border:"1px solid var(--border-hi)", borderRadius:8, padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", boxSizing:"border-box" };
 
 // ── local storage hook ──
 function useLs(key, init) {
@@ -338,10 +398,6 @@ function Dashboard({ session, isAdmin }) {
   const [priorityTasks,  _setPriorityTasks]  = useState([]);
   const [theme, setTheme] = useLs("etl_theme", "dark");
   const [dbReady, setDbReady] = useState(false);
-  const [showMotivation, setShowMotivation] = useState(false);
-  const [hasSeenMotivation, setHasSeenMotivation] = useState(false);
-  const [quoteIndex, setQuoteIndex] = useState(0);
-  const [toasts, setToasts] = useState([]);
   const isDark = theme === "dark";
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
@@ -517,7 +573,7 @@ function Dashboard({ session, isAdmin }) {
     <div data-theme={theme} style={{ minHeight:"100vh", background:"var(--bg)", color:"var(--text)", fontFamily:"system-ui,sans-serif" }}>
       {showMotivation && (
         <div style={{ position:"fixed", inset:0, zIndex:1100, background:"rgba(3,7,18,0.95)", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-          <div style={{ width:"100%", maxWidth:560, borderRadius:24, background:"var(--bg-card)", padding:32, textAlign:"center", boxShadow:"0 24px 80px rgba(0,0,0,0.35)" }}>
+          <div className="motivation-card" style={{ width:"100%", maxWidth:560, borderRadius:24, background:"var(--bg-card)", padding:32, textAlign:"center", boxShadow:"0 24px 80px rgba(0,0,0,0.35)" }}>
             <p style={{ fontSize:12, fontWeight:700, color:"#10B981", letterSpacing:"0.22em", marginBottom:12 }}>WELCOME BACK</p>
             <p style={{ fontSize:28, fontWeight:900, marginBottom:12 }}>Let's Get It Done 💪</p>
             <p style={{ fontSize:16, marginBottom:24, color:"var(--muted)", lineHeight:1.5 }}>
@@ -532,9 +588,9 @@ function Dashboard({ session, isAdmin }) {
         </div>
       )}
       {toasts.length > 0 && (
-        <div style={{ position:"fixed", right:16, bottom:16, zIndex:1200, display:"flex", flexDirection:"column", gap:10, alignItems:"flex-end" }}>
+        <div className="toast-stack">
           {toasts.map(t => (
-            <div key={t.id} style={{ minWidth:260, maxWidth:320, borderRadius:14, padding:"12px 14px", boxShadow:"0 18px 40px rgba(0,0,0,0.2)", background:t.variant==="success"?"#0f766e":"#111827", border:`1px solid ${t.variant==="success"?"#10B981":"#0f172a"}` }}>
+            <div key={t.id} className="toast-card" style={{ background:t.variant==="success"?"#0f766e":"#111827", border:`1px solid ${t.variant==="success"?"#10B981":"#0f172a"}` }}>
               <p style={{ fontSize:13, fontWeight:700, color:t.variant==="success"?"#bbf7d0":"#93c5fd", marginBottom:4 }}>{t.variant==="success"?"✅ Great news":"⏱️ Reminder"}</p>
               <p style={{ fontSize:13, color:"var(--text)", lineHeight:1.4 }}>{t.message}</p>
             </div>
@@ -543,7 +599,7 @@ function Dashboard({ session, isAdmin }) {
       )}
       {/* NAV */}
       <div style={{ background:"var(--bg-nav)", borderBottom:"1px solid var(--border)", padding:"0 16px", position:"sticky", top:0, zIndex:100 }}>
-        <div style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", gap:12, height:52 }}>
+        <div className="nav-inner">
           <div className="nav-brand" style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
             <span style={{ fontSize:22 }}>🚛</span>
             <div>
@@ -551,7 +607,7 @@ function Dashboard({ session, isAdmin }) {
               <p style={{ fontSize:9, color:"var(--dim)", letterSpacing:2 }}>LANES HQ</p>
             </div>
           </div>
-          <div style={{ display:"flex", gap:2, flex:1, overflowX:"auto" }}>
+          <div className="nav-tabs">
             {TABS.map(t => {
               const isActive = tab === t.id;
               const showBadge = t.id === "tasks" && urgentCount > 0;
@@ -572,7 +628,7 @@ function Dashboard({ session, isAdmin }) {
               );
             })}
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+          <div className="nav-controls">
             {redAlerts.length > 0 && (
               <div onClick={() => setTab("finance")} className="hide-mobile" style={{ background:"#7f1d1d", border:"1px solid #991b1b", borderRadius:8, padding:"3px 10px", cursor:"pointer" }}>
                 <span style={{ color:"#fca5a5", fontSize:12, fontWeight:700 }}>⚠️ {redAlerts.length}</span>
@@ -1879,10 +1935,10 @@ function ContactModal({ contact, onClose, setContacts }) {
 // ════════════════════════════════════════
 function SubNav({ tabs, active, onSelect }) {
   return (
-    <div style={{ display:"flex", gap:4, marginBottom:16, borderBottom:"1px solid var(--border)", paddingBottom:8, flexWrap:"wrap" }}>
+    <div className="subnav-row">
       {tabs.map(t => (
-        <button key={t.id} onClick={() => onSelect(t.id)}
-          style={{ padding:"7px 16px", borderRadius:8, fontSize:13, fontWeight:700, border:"none", whiteSpace:"nowrap",
+        <button key={t.id} onClick={() => onSelect(t.id)} className="subnav-btn"
+          style={{ padding:"7px 16px", borderRadius:8, fontSize:13, fontWeight:700, border:"none",
             background: active===t.id ? "#1d4ed8" : "var(--bg-subtle)",
             color: active===t.id ? "#fff" : "var(--muted)" }}>
           {t.label}
@@ -2119,7 +2175,7 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly, 
           </div>
 
           {[...urgentActive, ...urgentAll.filter(t=>t.done)].map(t => (
-            <div key={t.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", borderRadius:10, marginBottom:6,
+            <div key={t.id} className="priority-item" style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", borderRadius:10, marginBottom:6,
               background: t.done?"rgba(0,0,0,0.3)":"rgba(239,68,68,0.13)",
               border:`1px solid ${t.done?"rgba(239,68,68,0.12)":"rgba(239,68,68,0.4)"}`,
               opacity: t.done?0.5:1, transition:"opacity 0.2s" }}>
