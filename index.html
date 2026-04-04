@@ -398,6 +398,10 @@ function Dashboard({ session, isAdmin }) {
   const [priorityTasks,  _setPriorityTasks]  = useState([]);
   const [theme, setTheme] = useLs("etl_theme", "dark");
   const [dbReady, setDbReady] = useState(false);
+  const [showMotivation, setShowMotivation] = useState(false);
+  const [hasSeenMotivation, setHasSeenMotivation] = useState(false);
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  const [toasts, setToasts] = useState([]);
   const isDark = theme === "dark";
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
