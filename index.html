@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Elite Trucking Dashboard — last updated 2026-04-03 -->
+<!-- Elite Trucking Dashboard — last updated 2026-04-04 v1.8 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -226,7 +226,7 @@ const CONTACTS0 = [];
 const TASKS0 = [
   { role:"Dispatch",   color:"#3B82F6", emoji:"📡", tasks:[] },
   { role:"Recruiting", color:"#10B981", emoji:"🤝", tasks:[] },
-  { role:"Sales",      color:"#F59E0B", emoji:"📈", tasks:[] },
+  { role:"Shipper Outreach", color:"#F59E0B", emoji:"📋", tasks:[] },
   { role:"Compliance", color:"#8B5CF6", emoji:"🛡️", tasks:[] },
   { role:"Finance",    color:"#EF4444", emoji:"💰", tasks:[] },
 ];
@@ -240,7 +240,7 @@ const SEED_PRIORITY_TASKS = [
     person: "",
     priority: "urgent",
     deadline: "2026-04-10",
-    notes: "Must be completed before April 10th — required to operate as a broker",
+    notes: "$300 FMCSA filing fee required\nBOC-3 filing (process agent) must be on file\n$75,000 surety bond (BMC-84) must be active\nCompleted OP-1 application submitted to FMCSA\nValid DOT number required before applying\nProcessing time: 4–6 weeks after submission",
     done: false,
     seeded: true,
   },
@@ -364,7 +364,7 @@ function LoginPage() {
                 <div style={{ marginBottom:20 }}>
                   <label style={{ fontSize:11, color:"#6B7280", display:"block", marginBottom:5, fontWeight:700 }}>ROLE REQUESTED</label>
                   <select required value={roleReq} onChange={e=>setRoleReq(e.target.value)} style={iStyle}>
-                    {["Dispatch","Recruiting","Sales","Compliance","Finance","Staff"].map(r => <option key={r}>{r}</option>)}
+                    {["Dispatch","Recruiting","Shipper Outreach","Compliance","Finance","Staff"].map(r => <option key={r}>{r}</option>)}
                   </select>
                 </div>
                 {err && <p style={{ color:err.startsWith("✅")?"#10B981":err.startsWith("⏳")?"#F59E0B":"#EF4444", fontSize:12, marginBottom:14, textAlign:"center" }}>{err}</p>}
@@ -438,11 +438,19 @@ function Dashboard({ session, isAdmin }) {
       const stRow = st.data && st.data.length > 0 ? st.data[st.data.length - 1] : null;
       const ptRow = pt.data && pt.data.length > 0 ? pt.data[pt.data.length - 1] : null;
       if (stRow?.value) _setTasks(stRow.value);
-      // Merge seed tasks: prepend any seeds not already present, then persist
+      // Merge seed tasks: prepend missing seeds and overwrite notes/fields on existing seeds
       const loadedPT = ptRow?.value || [];
       const missingSeeds = SEED_PRIORITY_TASKS.filter(s => !loadedPT.some(t => t.id === s.id));
-      const mergedPT = missingSeeds.length > 0 ? [...missingSeeds, ...loadedPT] : loadedPT;
-      if (missingSeeds.length > 0) sb.from("app_settings").upsert({ key:"priority_tasks", value: mergedPT }, { onConflict: "key" });
+      const updatedPT = loadedPT.map(t => {
+        const seed = SEED_PRIORITY_TASKS.find(s => s.id === t.id);
+        return seed ? { ...t, notes: seed.notes, text: seed.text, deadline: seed.deadline, priority: seed.priority } : t;
+      });
+      const mergedPT = [...missingSeeds, ...updatedPT];
+      const needsPersist = missingSeeds.length > 0 || loadedPT.some(t => {
+        const seed = SEED_PRIORITY_TASKS.find(s => s.id === t.id);
+        return seed && t.notes !== seed.notes;
+      });
+      if (needsPersist) sb.from("app_settings").upsert({ key:"priority_tasks", value: mergedPT }, { onConflict: "key" });
       _setPriorityTasks(mergedPT);
       setDbReady(true);
     })();
@@ -531,7 +539,7 @@ function Dashboard({ session, isAdmin }) {
   const TABS = [
     { id:"overview",    label:"🏠 Overview" },
     { id:"tasks",       label:"✅ Tasks" },
-    { id:"operations",  label:"📡 Operations" },
+    { id:"operations",  label:"📦 Loads" },
     { id:"people",      label:"🚛 Drivers" },
     { id:"finance",     label:"💰 Finance" },
     ...(isAdmin ? [{ id:"admin", label:"🔐 Admin" }] : []),
@@ -2223,7 +2231,7 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly, 
               {asapActive.length === 0 && asapAll.length === 0 &&
                 <span style={{ fontSize:12, color:"rgba(245,158,11,0.4)" }}>No ASAP tasks</span>}
             </div>
-            {addBtn("asap", "+ Add ASAP", { background:"#431407", border:"1px solid #F59E0B", color:"#fcd34d" })}
+            {addBtn("asap", "+ Add Task", { background:"#431407", border:"1px solid #F59E0B", color:"#fcd34d" })}
           </div>
 
           {[...asapActive, ...asapAll.filter(t=>t.done)].map(t => (
@@ -2341,6 +2349,8 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly, 
 function TasksTab({ tasks, setTasks, priorityTasks, setPriorityTasks }) {
   const [sel, setSel] = useState(0);
   const [newText, setNewText] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+  const [newPriority, setNewPriority] = useState("normal");
   const [adding, setAdding] = useState(false);
   const [newRole, setNewRole] = useState("");
   const [addingRole, setAddingRole] = useState(false);
@@ -2353,8 +2363,8 @@ function TasksTab({ tasks, setTasks, priorityTasks, setPriorityTasks }) {
   }
   function addTask() {
     if (!newText.trim()) return;
-    setTasks(prev=>prev.map((p,i)=>i!==sel?p:{ ...p, tasks:[...p.tasks,{ id:"t_"+Date.now(), text:newText.trim(), done:false }] }));
-    setNewText(""); setAdding(false);
+    setTasks(prev=>prev.map((p,i)=>i!==sel?p:{ ...p, tasks:[...p.tasks,{ id:"t_"+Date.now(), text:newText.trim(), notes:newNotes.trim(), priority:newPriority, done:false }] }));
+    setNewText(""); setNewNotes(""); setNewPriority("normal"); setAdding(false);
   }
   function addRole() {
     if (!newRole.trim()) return;
@@ -2414,27 +2424,52 @@ function TasksTab({ tasks, setTasks, priorityTasks, setPriorityTasks }) {
             <span style={{ fontSize:28, fontWeight:900, color:cp.color }}>{done}/{cp.tasks.length}</span>
           </div>
 
-          {cp.tasks.map(t=>(
+          {cp.tasks.map(t=>{
+            const pBadge = t.priority==="urgent" ? { emoji:"🔴", label:"URGENT", bg:"rgba(239,68,68,0.15)", color:"#fca5a5" }
+                         : t.priority==="asap"   ? { emoji:"🟡", label:"ASAP",   bg:"rgba(245,158,11,0.15)", color:"#fcd34d" }
+                         : null;
+            return (
             <div key={t.id} onClick={()=>toggle(sel,t.id)}
-              style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 8px", borderRadius:8, cursor:"pointer", marginBottom:2 }}
+              style={{ display:"flex", alignItems:"flex-start", gap:12, padding:"10px 8px", borderRadius:8, cursor:"pointer", marginBottom:2 }}
               onMouseEnter={e=>e.currentTarget.style.background="#1f2937"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <div style={{ width:24, height:24, borderRadius:6, border:`2px solid ${t.done?cp.color:"#374151"}`, background:t.done?cp.color:"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <div style={{ width:24, height:24, borderRadius:6, border:`2px solid ${t.done?cp.color:"#374151"}`, background:t.done?cp.color:"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:2 }}>
                 {t.done && <span style={{ color:"#fff", fontSize:13 }}>✓</span>}
               </div>
-              <span style={{ flex:1, fontSize:14, color:t.done?"#4B5563":"#e5e7eb", textDecoration:t.done?"line-through":"none" }}>{t.text}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:14, color:t.done?"#4B5563":"#e5e7eb", textDecoration:t.done?"line-through":"none" }}>{t.text}</span>
+                  {pBadge && <span style={{ fontSize:10, fontWeight:700, background:pBadge.bg, color:pBadge.color, padding:"1px 6px", borderRadius:4 }}>{pBadge.emoji} {pBadge.label}</span>}
+                </div>
+                {t.notes && <p style={{ fontSize:11, color:"var(--muted)", marginTop:3, lineHeight:1.35, whiteSpace:"pre-line" }}>{t.notes}</p>}
+              </div>
               <button onClick={e=>{ e.stopPropagation(); del(sel,t.id); }}
-                style={{ opacity:0.3, border:"none", background:"none", color:"var(--muted)", fontSize:16, padding:4 }}
+                style={{ opacity:0.3, border:"none", background:"none", color:"var(--muted)", fontSize:16, padding:4, flexShrink:0 }}
                 onMouseEnter={e=>{e.target.style.opacity=1;e.target.style.color="#EF4444";}}
                 onMouseLeave={e=>{e.target.style.opacity=0.3;e.target.style.color="#6B7280";}}>✕</button>
             </div>
-          ))}
+            );
+          })}
 
           {adding ? (
-            <div style={{ marginTop:8, display:"flex", gap:8 }}>
-              <input value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} placeholder="Type task and press Enter..." autoFocus style={inp} />
-              <button onClick={addTask} style={{ padding:"8px 16px", borderRadius:8, border:"none", background:cp.color, color:"#fff", fontWeight:700 }}>Add</button>
-              <button onClick={()=>{setAdding(false);setNewText("");}} style={{ background:"none", border:"none", color:"var(--muted)", fontSize:16 }}>✕</button>
+            <div style={{ marginTop:10, background:"var(--bg-subtle)", borderRadius:10, padding:"12px 14px", border:"1px solid var(--border)" }}>
+              <input value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} placeholder="Task title..." autoFocus style={{...inp, marginBottom:8}} />
+              <textarea value={newNotes} onChange={e=>setNewNotes(e.target.value)} placeholder="Notes / requirements (optional)..." rows={2} style={{...inp, resize:"vertical", minHeight:52, marginBottom:10}} />
+              <div style={{ display:"flex", gap:6, marginBottom:10 }}>
+                {[{key:"normal",emoji:"🟢",label:"NORMAL"},{key:"asap",emoji:"🟡",label:"ASAP"},{key:"urgent",emoji:"🔴",label:"URGENT"}].map(p=>(
+                  <button key={p.key} onClick={()=>setNewPriority(p.key)}
+                    style={{ flex:1, padding:"7px 4px", borderRadius:8, border: newPriority===p.key ? `2px solid ${p.key==="urgent"?"#EF4444":p.key==="asap"?"#F59E0B":"#10B981"}` : "1px solid var(--border-hi)",
+                      background: newPriority===p.key ? (p.key==="urgent"?"rgba(239,68,68,0.18)":p.key==="asap"?"rgba(245,158,11,0.18)":"rgba(16,185,129,0.18)") : "transparent",
+                      color: newPriority===p.key ? (p.key==="urgent"?"#fca5a5":p.key==="asap"?"#fcd34d":"#6ee7b7") : "var(--muted)",
+                      fontWeight: newPriority===p.key ? 800 : 500, fontSize:11, cursor:"pointer" }}>
+                    {p.emoji} {p.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button onClick={()=>{setAdding(false);setNewText("");setNewNotes("");setNewPriority("normal");}} style={{ padding:"7px 14px", borderRadius:8, border:"1px solid var(--border-hi)", background:"none", color:"#9CA3AF", fontSize:13 }}>Cancel</button>
+                <button onClick={addTask} style={{ padding:"7px 18px", borderRadius:8, border:"none", background:cp.color, color:"#fff", fontWeight:700, fontSize:13 }}>Add Task</button>
+              </div>
             </div>
           ) : (
             <button onClick={()=>setAdding(true)}
