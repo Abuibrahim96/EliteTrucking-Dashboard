@@ -146,9 +146,6 @@ table { border-spacing: 0; border-collapse: collapse; }
   input, select  { min-height: 44px; font-size: 16px; } /* 16px prevents iOS auto-zoom */
   textarea       { font-size: 16px; }
 
-  /* Motivational modal card */
-  .motivation-card { padding: 20px !important; }
-
   /* Priority task items */
   .priority-item { padding: 10px 12px !important; gap: 10px !important; }
 }
@@ -398,20 +395,11 @@ function Dashboard({ session, isAdmin }) {
   const [priorityTasks,  _setPriorityTasks]  = useState([]);
   const [theme, setTheme] = useLs("etl_theme", "dark");
   const [dbReady, setDbReady] = useState(false);
-  const [showMotivation, setShowMotivation] = useState(false);
-  const [hasSeenMotivation, setHasSeenMotivation] = useState(false);
-  const [quoteIndex, setQuoteIndex] = useState(0);
+  const [showTaskAlert, setShowTaskAlert] = useState(false);
+  const [hasSeenAlert, setHasSeenAlert] = useState(false);
   const [toasts, setToasts] = useState([]);
   const isDark = theme === "dark";
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
-
-  const quotes = [
-    "Move freight. Move money. Move forward.",
-    "The open road doesn't wait — neither should you.",
-    "Every load delivered is momentum earned.",
-    "Hustle like a driver on a tight ETA.",
-    "Win the day by clearing the board first.",
-  ];
 
   function pushToast(message, variant = "info") {
     const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
@@ -557,30 +545,19 @@ function Dashboard({ session, isAdmin }) {
     ...(isAdmin ? [{ id:"admin", label:"🔐 Admin" }] : []),
   ];
 
-  // ── Motivational modal on first load ──
+  // ── Task alert modal on first load (only if urgent/ASAP tasks exist) ──
   useEffect(() => {
-    if (!dbReady || hasSeenMotivation) return;
-    setShowMotivation(true);
-    const dismiss = setTimeout(() => setShowMotivation(false), 3500);
-    setHasSeenMotivation(true);
-    return () => clearTimeout(dismiss);
-  }, [dbReady, hasSeenMotivation]);
-
-  // ── Rotate motivational quote while modal is open ──
-  useEffect(() => {
-    if (!showMotivation) return;
-    const cycle = setInterval(() => setQuoteIndex(idx => (idx + 1) % quotes.length), 1400);
-    return () => clearInterval(cycle);
-  }, [showMotivation]);
+    if (!dbReady || hasSeenAlert) return;
+    setHasSeenAlert(true);
+    if (urgentAsapCount > 0) setShowTaskAlert(true);
+  }, [dbReady, hasSeenAlert, urgentAsapCount]);
 
   // ── 2-hour urgent task reminder toasts ──
   useEffect(() => {
     if (!dbReady) return;
     const timer = setInterval(() => {
       if (urgentCount > 0) {
-        pushToast(`You still have ${urgentCount} urgent tasks — let's go!`, "info");
-      } else {
-        pushToast("🔥 All urgent tasks cleared! Keep pushing.", "success");
+        pushToast(`⚠️ You have ${urgentCount} urgent task${urgentCount!==1?"s":""} pending — elitetrucking.xyz`, "info");
       }
     }, 7200000);
     return () => clearInterval(timer);
@@ -595,19 +572,63 @@ function Dashboard({ session, isAdmin }) {
 
   return (
     <div data-theme={theme} style={{ minHeight:"100vh", background:"var(--bg)", color:"var(--text)", fontFamily:"system-ui,sans-serif" }}>
-      {showMotivation && (
-        <div style={{ position:"fixed", inset:0, zIndex:1100, background:"rgba(3,7,18,0.95)", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-          <div className="motivation-card" style={{ width:"100%", maxWidth:560, borderRadius:24, background:"var(--bg-card)", padding:32, textAlign:"center", boxShadow:"0 24px 80px rgba(0,0,0,0.35)" }}>
-            <p style={{ fontSize:12, fontWeight:700, color:"#10B981", letterSpacing:"0.22em", marginBottom:12 }}>WELCOME BACK</p>
-            <p style={{ fontSize:28, fontWeight:900, marginBottom:12 }}>Let's Get It Done 💪</p>
-            <p style={{ fontSize:16, marginBottom:24, color:"var(--muted)", lineHeight:1.5 }}>
-              {urgentAsapCount > 0 ? `${urgentAsapCount} urgent / ASAP task${urgentAsapCount!==1?"s":""} waiting` : "No urgent tasks waiting — stay sharp."}
-            </p>
-            <div style={{ marginBottom:24, padding:"18px 20px", borderRadius:18, background:"rgba(14,116,144,0.08)", border:"1px solid rgba(14,116,144,0.18)" }}>
-              <p style={{ fontSize:15, color:"var(--text)", fontWeight:700, marginBottom:8 }}>“{quotes[quoteIndex]}”</p>
-              <p style={{ fontSize:12, color:"var(--muted)" }}>Road, freight, and hustle energy for the day.</p>
+      {showTaskAlert && (
+        <div style={{ position:”fixed”, inset:0, zIndex:1100, background:”rgba(3,7,18,0.92)”, display:”flex”, alignItems:”center”, justifyContent:”center”, padding:16 }}>
+          <div style={{ width:”100%”, maxWidth:560, borderRadius:20, background:”var(--bg-card)”, padding:28, boxShadow:”0 24px 80px rgba(0,0,0,0.4)”, maxHeight:”85vh”, display:”flex”, flexDirection:”column” }}>
+            <p style={{ fontWeight:900, fontSize:20, marginBottom:20 }}>🔴 Tasks Needing Attention</p>
+
+            <div style={{ overflowY:”auto”, flex:1, marginBottom:20 }}>
+              {/* URGENT */}
+              {priorityTasks.filter(t=>t.priority===”urgent”&&!t.done).length > 0 && (
+                <div style={{ marginBottom:16 }}>
+                  <p style={{ fontSize:12, fontWeight:800, color:”#EF4444”, letterSpacing:”0.1em”, marginBottom:8 }}>🚨 URGENT — DROP EVERYTHING</p>
+                  {priorityTasks.filter(t=>t.priority===”urgent”&&!t.done).map(t=>(
+                    <div key={t.id} style={{ display:”flex”, alignItems:”flex-start”, gap:12, padding:”12px 14px”, borderRadius:10, background:”rgba(239,68,68,0.1)”, border:”1px solid rgba(239,68,68,0.3)”, marginBottom:8 }}>
+                      <div onClick={()=>{ setPriorityTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true}:x)); }}
+                        style={{ width:22, height:22, borderRadius:6, border:”2px solid rgba(239,68,68,0.7)”, background:”transparent”, display:”flex”, alignItems:”center”, justifyContent:”center”, flexShrink:0, cursor:”pointer”, marginTop:2 }}>
+                      </div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <p style={{ fontWeight:700, fontSize:14, color:”#fff”, marginBottom:3 }}>{t.text}</p>
+                        {t.deadline && <p style={{ fontSize:11, color:”#fca5a5”, marginBottom:3 }}>📅 Due {new Date(t.deadline+”T12:00:00”).toLocaleDateString(“en-US”,{month:”short”,day:”numeric”,year:”numeric”})}</p>}
+                        {t.notes && <p style={{ fontSize:11, color:”#9CA3AF”, lineHeight:1.4, whiteSpace:”pre-line” }}>{t.notes}</p>}
+                      </div>
+                      <button onClick={()=>{ setPriorityTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true}:x)); }}
+                        style={{ fontSize:10, fontWeight:700, padding:”4px 10px”, borderRadius:6, border:”1px solid rgba(239,68,68,0.5)”, background:”rgba(239,68,68,0.15)”, color:”#fca5a5”, cursor:”pointer”, whiteSpace:”nowrap”, flexShrink:0 }}>
+                        Mark Done
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ASAP */}
+              {priorityTasks.filter(t=>t.priority===”asap”&&!t.done).length > 0 && (
+                <div>
+                  <p style={{ fontSize:12, fontWeight:800, color:”#F59E0B”, letterSpacing:”0.1em”, marginBottom:8 }}>⚡ ASAP — NEEDS TO BE DONE TODAY</p>
+                  {priorityTasks.filter(t=>t.priority===”asap”&&!t.done).map(t=>(
+                    <div key={t.id} style={{ display:”flex”, alignItems:”flex-start”, gap:12, padding:”11px 13px”, borderRadius:10, background:”rgba(245,158,11,0.08)”, border:”1px solid rgba(245,158,11,0.25)”, marginBottom:8 }}>
+                      <div onClick={()=>{ setPriorityTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true}:x)); }}
+                        style={{ width:22, height:22, borderRadius:6, border:”2px solid rgba(245,158,11,0.6)”, background:”transparent”, display:”flex”, alignItems:”center”, justifyContent:”center”, flexShrink:0, cursor:”pointer”, marginTop:2 }}>
+                      </div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <p style={{ fontWeight:700, fontSize:14, color:”var(--text)”, marginBottom:3 }}>{t.text}</p>
+                        {t.deadline && <p style={{ fontSize:11, color:”#fcd34d”, marginBottom:3 }}>📅 Due {new Date(t.deadline+”T12:00:00”).toLocaleDateString(“en-US”,{month:”short”,day:”numeric”,year:”numeric”})}</p>}
+                        {t.notes && <p style={{ fontSize:11, color:”#9CA3AF”, lineHeight:1.4, whiteSpace:”pre-line” }}>{t.notes}</p>}
+                      </div>
+                      <button onClick={()=>{ setPriorityTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true}:x)); }}
+                        style={{ fontSize:10, fontWeight:700, padding:”4px 10px”, borderRadius:6, border:”1px solid rgba(245,158,11,0.4)”, background:”rgba(245,158,11,0.12)”, color:”#fcd34d”, cursor:”pointer”, whiteSpace:”nowrap”, flexShrink:0 }}>
+                        Mark Done
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <button onClick={() => setShowMotivation(false)} style={{ border:"none", borderRadius:12, padding:"14px 24px", background:"#1d4ed8", color:"#fff", fontSize:14, fontWeight:700 }}>Let's Get It Done 💪</button>
+
+            <button onClick={() => setShowTaskAlert(false)}
+              style={{ width:”100%”, border:”none”, borderRadius:12, padding:”14px 24px”, background:”#1d4ed8”, color:”#fff”, fontSize:15, fontWeight:800, cursor:”pointer” }}>
+              Got It, Let's Work 💪
+            </button>
           </div>
         </div>
       )}
