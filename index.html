@@ -437,7 +437,16 @@ function Dashboard({ session, isAdmin }) {
       // Pick the last row in case of duplicates (caused by missing onConflict in past upserts)
       const stRow = st.data && st.data.length > 0 ? st.data[st.data.length - 1] : null;
       const ptRow = pt.data && pt.data.length > 0 ? pt.data[pt.data.length - 1] : null;
-      if (stRow?.value) _setTasks(stRow.value);
+      if (stRow?.value) {
+        // Migrate: rename legacy "Sales" dept to "Shipper Outreach"
+        let loadedTasks = stRow.value;
+        const hasSales = loadedTasks.some(d => d.role === "Sales");
+        if (hasSales) {
+          loadedTasks = loadedTasks.map(d => d.role === "Sales" ? { ...d, role:"Shipper Outreach", emoji:"📋" } : d);
+          sb.from("app_settings").upsert({ key:"tasks", value: loadedTasks }, { onConflict: "key" });
+        }
+        _setTasks(loadedTasks);
+      }
       // Merge seed tasks: prepend missing seeds and overwrite notes/fields on existing seeds
       const loadedPT = ptRow?.value || [];
       const missingSeeds = SEED_PRIORITY_TASKS.filter(s => !loadedPT.some(t => t.id === s.id));
@@ -469,7 +478,10 @@ function Dashboard({ session, isAdmin }) {
       ]);
       const stRow = st.data && st.data.length > 0 ? st.data[st.data.length - 1] : null;
       const ptRow = pt.data && pt.data.length > 0 ? pt.data[pt.data.length - 1] : null;
-      if (stRow?.value) _setTasks(stRow.value);
+      if (stRow?.value) {
+        const t = stRow.value.map(d => d.role === "Sales" ? { ...d, role:"Shipper Outreach", emoji:"📋" } : d);
+        _setTasks(t);
+      }
       if (ptRow?.value) _setPriorityTasks(ptRow.value);
     };
     const ch = sb.channel("realtime-all")
@@ -2390,12 +2402,12 @@ function TasksTab({ tasks, setTasks, priorityTasks, setPriorityTasks }) {
         <button onClick={()=>setAddingRole(true)} style={{ fontSize:12, padding:"6px 12px", background:"var(--bg-subtle)", border:"1px solid var(--border-hi)", color:"#9CA3AF", borderRadius:8 }}>+ Add Role</button>
       </div>
 
-      <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
+      <div style={{ display:"flex", gap:6, marginBottom:12, overflowX:"auto", paddingBottom:4, WebkitOverflowScrolling:"touch" }}>
         {tasks.map((p,i) => {
           const d=p.tasks.filter(t=>t.done).length;
           const pct=p.tasks.length?(d/p.tasks.length)*100:0;
           return (
-            <button key={i} onClick={()=>setSel(i)} style={{ borderRadius:12, padding:"10px 14px", border: i===sel?`2px solid ${p.color}`:"1px solid var(--border)", background: i===sel?p.color+"18":"var(--bg-card)", textAlign:"left", minWidth:120 }}>
+            <button key={i} onClick={()=>setSel(i)} style={{ borderRadius:12, padding:"10px 14px", border: i===sel?`2px solid ${p.color}`:"1px solid var(--border)", background: i===sel?p.color+"18":"var(--bg-card)", textAlign:"left", minWidth:110, flexShrink:0 }}>
               <div style={{ display:"flex", alignItems:"center", gap:4, marginBottom:4 }}>
                 <span style={{ fontSize:14 }}>{p.emoji}</span>
                 <span style={{ fontSize:12, fontWeight:700, color: i===sel?p.color:"var(--muted)" }}>{p.role}</span>
