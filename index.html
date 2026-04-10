@@ -600,7 +600,7 @@ function Dashboard({ session, isAdmin }) {
     { id:"operations",  label:"📦 Loads" },
     { id:"people",      label:"🚛 Drivers" },
     { id:"finance",     label:"💰 Finance" },
-    { id:"agents",      label:"🤖 AI Agents" },
+    ...(isAdmin ? [{ id:"agents", label:"🤖 AI Agents" }] : []),
     ...(isAdmin ? [{ id:"admin", label:"🔐 Admin" }] : []),
   ];
 
@@ -721,7 +721,7 @@ function Dashboard({ session, isAdmin }) {
         {tab==="people"     && <PeopleTab            drivers={drivers} setDrivers={setDrivers} contacts={contacts} setContacts={setContacts} />}
         {tab==="finance"    && <FinanceComplianceTab loads={loads} setLoads={setLoads} drivers={drivers} ooFees={ooFees} brokerProfit={brokerProfit} totalProfit={totalProfit} brokerLoads={brokerLoads} setBrokerLoads={setBrokerLoads} alerts={alerts} />}
         {tab==="tasks"      && <TasksTab             tasks={tasks} setTasks={setTasks} priorityTasks={priorityTasks} setPriorityTasks={setPriorityTasks} />}
-        {tab==="agents"     && <AIAgentsTab />}
+        {tab==="agents"     && isAdmin && <AIAgentsTab />}
         {tab==="admin"      && isAdmin && <AdminTab />}
       </div>
     </div>
