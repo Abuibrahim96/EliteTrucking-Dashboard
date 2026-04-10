@@ -73,9 +73,13 @@ table { border-spacing: 0; border-collapse: collapse; }
 }
 .nav-tabs {
   display: flex; gap: 2px; flex: 1;
-  overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; padding-bottom: 4px;
 }
-.nav-tabs::-webkit-scrollbar { display: none; }
+@media (min-width: 769px) {
+  .nav-tabs { scrollbar-width: none; }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+}
 .nav-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* ── Sub-navigation: always a single scrollable row ── */
