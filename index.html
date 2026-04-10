@@ -2842,29 +2842,63 @@ function AIAgentsTab() {
 
     // === CONTROL TAB ===
     subTab === "control" && React.createElement("div", null,
-      // Agent cards grid
-      React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", gap:12, marginBottom:16 } },
-        AGENT_DEFS.map(a => {
+
+      // Pyramid layout — renders one agent card
+      // Row 1: Boss (1 card, centered)
+      // Row 2: Dispatch + Outreach (2 cards)
+      // Row 3: Load Update + Compliance + Acquisition (3 cards)
+
+      // Helper to render a single agent card
+      ...(() => {
+        const PYRAMID = [
+          { agents: ["boss"],                          cols: "1fr", label: "ORCHESTRATOR" },
+          { agents: ["dispatch", "outreach"],           cols: "1fr 1fr", label: "MID-LAYER" },
+          { agents: ["load_update", "compliance", "acquisition"], cols: "1fr 1fr 1fr", label: "WORKERS" },
+        ];
+
+        const renderCard = (a) => {
           const isRunning = runningAgent === a.name;
           const lastRun = agentStatuses.find(s => s.agent === a.name);
-          return React.createElement(Card, { key:a.name, style:{ borderColor: isRunning ? "#3b82f6" : "var(--border)", transition:"all 0.2s" } },
-            React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" } },
+          return React.createElement(Card, { key: a.name, style: { borderColor: isRunning ? "#3b82f6" : "var(--border)", transition: "all 0.2s" } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } },
               React.createElement("div", null,
-                React.createElement("p", { style:{ fontWeight:700, fontSize:14, marginBottom:4 } }, a.icon + " " + a.label),
-                React.createElement("p", { style:{ fontSize:11, color:"var(--muted)", marginBottom:6 } }, a.desc),
-                React.createElement("p", { style:{ fontSize:10, color:"var(--dim)" } }, "Schedule: " + a.schedule),
-                lastRun?.last_run && React.createElement("p", { style:{ fontSize:10, color: lastRun.last_success ? "#10b981" : "#ef4444", marginTop:4 } },
-                  "Last: " + lastRun.last_action + " (" + (lastRun.last_tokens||0) + " tokens)")
+                React.createElement("p", { style: { fontWeight: 700, fontSize: 14, marginBottom: 4 } }, a.icon + " " + a.label),
+                React.createElement("p", { style: { fontSize: 11, color: "var(--muted)", marginBottom: 6 } }, a.desc),
+                React.createElement("p", { style: { fontSize: 10, color: "var(--dim)" } }, "Schedule: " + a.schedule),
+                lastRun?.last_run && React.createElement("p", { style: { fontSize: 10, color: lastRun.last_success ? "#10b981" : "#ef4444", marginTop: 4 } },
+                  "Last: " + lastRun.last_action + " (" + (lastRun.last_tokens || 0) + " tokens)")
               ),
               React.createElement("button", {
                 onClick: () => runAgent(a.name, a.trigger), disabled: isRunning,
-                style:{ padding:"6px 16px", borderRadius:8, border:"none", fontSize:12, fontWeight:700, cursor: isRunning?"not-allowed":"pointer",
+                style: { padding: "6px 16px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 700, cursor: isRunning ? "not-allowed" : "pointer",
                   background: isRunning ? "#1e3a5f" : "#f59e0b", color: isRunning ? "#60a5fa" : "#000", opacity: isRunning ? 0.7 : 1 }
               }, isRunning ? "Running..." : "▶ Run")
             )
           );
-        })
-      ),
+        };
+
+        const rows = PYRAMID.map((row, ri) =>
+          React.createElement("div", { key: ri, style: { position: "relative", marginBottom: ri < 2 ? 0 : 16 } },
+            // Tier label
+            React.createElement("div", { style: { textAlign: "center", marginBottom: 6 } },
+              React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: ri === 0 ? "#f59e0b" : ri === 1 ? "#3b82f6" : "var(--dim)", textTransform: "uppercase" } }, row.label)
+            ),
+            // Cards
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: row.cols, gap: 12, maxWidth: ri === 0 ? 420 : ri === 1 ? 700 : "100%", margin: "0 auto" } },
+              row.agents.map(name => {
+                const a = AGENT_DEFS.find(d => d.name === name);
+                return a ? renderCard(a) : null;
+              })
+            ),
+            // Connector lines (visual pyramid connectors)
+            ri < 2 && React.createElement("div", { style: { textAlign: "center", padding: "6px 0", color: "var(--dim)", fontSize: 18, lineHeight: 1 } },
+              ri === 0 ? "┌────────┴────────┐" : "┌──────┴──────┬──────┴──────┐"
+            )
+          )
+        );
+
+        return rows;
+      })(),
 
       // Agent output
       agentOutput && React.createElement(Card, { style:{ marginBottom:16 } },
