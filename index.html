@@ -600,6 +600,7 @@ function Dashboard({ session, isAdmin }) {
     { id:"operations",  label:"📦 Loads" },
     { id:"people",      label:"🚛 Drivers" },
     { id:"finance",     label:"💰 Finance" },
+    { id:"agents",      label:"🤖 AI Agents" },
     ...(isAdmin ? [{ id:"admin", label:"🔐 Admin" }] : []),
   ];
 
@@ -720,6 +721,7 @@ function Dashboard({ session, isAdmin }) {
         {tab==="people"     && <PeopleTab            drivers={drivers} setDrivers={setDrivers} contacts={contacts} setContacts={setContacts} />}
         {tab==="finance"    && <FinanceComplianceTab loads={loads} setLoads={setLoads} drivers={drivers} ooFees={ooFees} brokerProfit={brokerProfit} totalProfit={totalProfit} brokerLoads={brokerLoads} setBrokerLoads={setBrokerLoads} alerts={alerts} />}
         {tab==="tasks"      && <TasksTab             tasks={tasks} setTasks={setTasks} priorityTasks={priorityTasks} setPriorityTasks={setPriorityTasks} />}
+        {tab==="agents"     && <AIAgentsTab />}
         {tab==="admin"      && isAdmin && <AdminTab />}
       </div>
     </div>
@@ -2691,6 +2693,286 @@ function AdminTab() {
         </>
       )}
     </div>
+  );
+}
+
+// ════════════════════════════════════════
+//  AI AGENTS TAB
+// ════════════════════════════════════════
+const AGENT_API = "http://localhost:3000";
+const AGENT_KEY = "demo-key-123";
+
+const AGENT_DEFS = [
+  { name:"boss",        label:"Boss Agent",        icon:"👔", desc:"Daily briefing, task delegation, operations overview", trigger:"scheduled", schedule:"6:00 AM daily" },
+  { name:"dispatch",    label:"Dispatch Agent",     icon:"🚛", desc:"Match loads to drivers, assign, send SMS offers", trigger:"manual", schedule:"On new load + manual" },
+  { name:"outreach",    label:"Outreach Agent",     icon:"📧", desc:"Broker & shipper outreach emails, follow-ups", trigger:"scheduled", schedule:"8:00 AM daily" },
+  { name:"load_update", label:"Load Update Agent",  icon:"📍", desc:"Driver check-ins, ETA updates, delay detection", trigger:"scheduled", schedule:"Every 2 hours" },
+  { name:"compliance",  label:"Compliance Agent",   icon:"📋", desc:"Expiration tracking, reminders, suspension requests", trigger:"scheduled", schedule:"7:00 AM daily" },
+  { name:"acquisition", label:"Acquisition Agent",  icon:"🔍", desc:"New partner research, lane gap analysis", trigger:"scheduled", schedule:"Monday 7:00 AM" },
+];
+
+async function agentAPI(path, opts = {}) {
+  const res = await fetch(AGENT_API + path, {
+    method: opts.method || "GET",
+    headers: { "x-api-key": AGENT_KEY, "Content-Type": "application/json" },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (!res.ok) throw new Error("API " + res.status);
+  return res.json();
+}
+
+function AIAgentsTab() {
+  const [connected, setConnected] = React.useState(null);
+  const [stats, setStats] = React.useState(null);
+  const [approvals, setApprovals] = React.useState([]);
+  const [comms, setComms] = React.useState([]);
+  const [compAlerts, setCompAlerts] = React.useState(null);
+  const [pipeline, setPipeline] = React.useState(null);
+  const [runningAgent, setRunningAgent] = React.useState(null);
+  const [agentOutput, setAgentOutput] = React.useState(null);
+  const [agentMeta, setAgentMeta] = React.useState(null);
+  const [agentStatuses, setAgentStatuses] = React.useState([]);
+  const [subTab, setSubTab] = React.useState("control");
+
+  const refresh = React.useCallback(async () => {
+    try {
+      const [ld, dr, comp, app, cm, pl, as] = await Promise.all([
+        agentAPI("/api/dashboard/loads/summary"),
+        agentAPI("/api/dashboard/drivers/summary"),
+        agentAPI("/api/dashboard/compliance/alerts"),
+        agentAPI("/api/approvals?status=pending"),
+        agentAPI("/api/dashboard/communications?limit=30"),
+        agentAPI("/api/dashboard/outreach/pipeline"),
+        agentAPI("/api/dashboard/agents/status"),
+      ]);
+      setStats({ loads: ld, drivers: dr });
+      setCompAlerts(comp);
+      setApprovals(app.approvals || []);
+      setComms(cm.communications || []);
+      setPipeline(pl);
+      setAgentStatuses(as.agents || []);
+      setConnected(true);
+    } catch(e) { setConnected(false); }
+  }, []);
+
+  React.useEffect(() => { refresh(); const iv = setInterval(refresh, 20000); return () => clearInterval(iv); }, []);
+
+  async function runAgent(name, trigger) {
+    setRunningAgent(name);
+    setAgentOutput(null);
+    setAgentMeta(null);
+    try {
+      const r = await agentAPI(`/api/agent/${name}/run`, { method:"POST", body:{ trigger, context:{} } });
+      setAgentOutput(r.response || r.error || "No response");
+      setAgentMeta({ turns: r.turns, tokens: r.tokensUsed, time: r.durationMs, actions: r.actions || [] });
+      setTimeout(refresh, 500);
+    } catch(e) {
+      setAgentOutput("ERROR: " + e.message);
+    }
+    setRunningAgent(null);
+  }
+
+  async function handleApproval(id, status) {
+    await agentAPI(`/api/approvals/${id}`, { method:"PATCH", body:{ status, resolvedBy:"dashboard" } });
+    refresh();
+  }
+
+  const statBadge = (val, label, color) => (
+    React.createElement("div", { style:{ textAlign:"center" } },
+      React.createElement("div", { style:{ fontSize:24, fontWeight:800, color } }, val),
+      React.createElement("div", { style:{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", marginTop:2 } }, label)
+    )
+  );
+
+  const SUB_TABS = [
+    { id:"control", label:"🎮 Control" },
+    { id:"approvals", label:"📝 Approvals" },
+    { id:"comms", label:"💬 Comms Log" },
+    { id:"compliance", label:"🛡️ Compliance" },
+    { id:"pipeline", label:"📊 Pipeline" },
+  ];
+
+  if (connected === null) return React.createElement(Card, null, React.createElement("p", { style:{ textAlign:"center", padding:40, color:"var(--muted)" } }, "Connecting to Agent System..."));
+  if (connected === false) return React.createElement(Card, { style:{ borderColor:"#EF4444" } },
+    React.createElement("div", { style:{ textAlign:"center", padding:40 } },
+      React.createElement("p", { style:{ fontSize:18, fontWeight:700, color:"#fca5a5", marginBottom:8 } }, "⚠️ Agent System Offline"),
+      React.createElement("p", { style:{ color:"var(--muted)", fontSize:13, marginBottom:16 } }, "Cannot connect to the agent API at localhost:3000"),
+      React.createElement("p", { style:{ color:"var(--dim)", fontSize:12 } }, "Start the server: cd C:\\Users\\hassa\\elite-agents && node server.js"),
+      React.createElement("button", { onClick:refresh, style:{ marginTop:16, padding:"8px 20px", borderRadius:8, border:"1px solid var(--border-hi)", background:"var(--bg-subtle)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" } }, "Retry Connection")
+    )
+  );
+
+  return React.createElement("div", null,
+    // Header
+    React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 } },
+      React.createElement("div", null,
+        React.createElement("p", { style:{ fontWeight:900, fontSize:18 } }, "🤖 AI Agent Control Panel"),
+        React.createElement("p", { style:{ color:"var(--muted)", fontSize:12, marginTop:2 } }, "Manage, run, and monitor all 6 AI agents")
+      ),
+      React.createElement("div", { style:{ display:"flex", alignItems:"center", gap:8 } },
+        React.createElement("span", { style:{ width:8, height:8, borderRadius:"50%", background:"#10B981", display:"inline-block" } }),
+        React.createElement("span", { style:{ fontSize:12, color:"#10B981", fontWeight:600 } }, "System Online"),
+        React.createElement("button", { onClick:refresh, style:{ marginLeft:8, padding:"4px 12px", borderRadius:6, border:"1px solid var(--border-hi)", background:"var(--bg-subtle)", color:"var(--muted)", fontSize:11, fontWeight:700, cursor:"pointer" } }, "↻ Refresh")
+      )
+    ),
+
+    // Stats row
+    stats && React.createElement(Card, { style:{ marginBottom:16 } },
+      React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(100px, 1fr))", gap:12 } },
+        statBadge(stats.drivers?.total || 0, "Drivers", "#e5e7eb"),
+        statBadge(stats.loads?.pipeline?.filter(p=>["assigned","dispatched","in_transit"].includes(p.status)).reduce((s,p)=>s+p.count,0) || 0, "Active Loads", "#3b82f6"),
+        statBadge("$" + Number(stats.loads?.totals?.total_revenue || 0).toLocaleString(), "Revenue", "#f59e0b"),
+        statBadge("$" + Number(stats.loads?.totals?.total_margin || 0).toLocaleString(), "Margin", "#10b981"),
+        statBadge((compAlerts?.expired?.count||0) + (compAlerts?.expiring_30_days?.count||0), "Alerts", "#ef4444"),
+        statBadge(approvals.length, "Approvals", "#8b5cf6"),
+        statBadge(comms.length, "Messages", "#6b7280"),
+        statBadge(pipeline?.pipeline?.reduce((s,p)=>s+p.count,0)||0, "Prospects", "#f97316")
+      )
+    ),
+
+    // Sub-tabs
+    React.createElement("div", { className:"subnav-row" },
+      SUB_TABS.map(t => React.createElement("button", {
+        key: t.id, className:"subnav-btn",
+        onClick: () => setSubTab(t.id),
+        style:{ padding:"6px 14px", borderRadius:8, fontSize:12, fontWeight:700, border:"none", cursor:"pointer",
+          background: subTab===t.id ? "#1d4ed8" : "transparent", color: subTab===t.id ? "#fff" : "var(--muted)" }
+      }, t.label))
+    ),
+
+    // === CONTROL TAB ===
+    subTab === "control" && React.createElement("div", null,
+      // Agent cards grid
+      React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", gap:12, marginBottom:16 } },
+        AGENT_DEFS.map(a => {
+          const isRunning = runningAgent === a.name;
+          const lastRun = agentStatuses.find(s => s.agent === a.name);
+          return React.createElement(Card, { key:a.name, style:{ borderColor: isRunning ? "#3b82f6" : "var(--border)", transition:"all 0.2s" } },
+            React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" } },
+              React.createElement("div", null,
+                React.createElement("p", { style:{ fontWeight:700, fontSize:14, marginBottom:4 } }, a.icon + " " + a.label),
+                React.createElement("p", { style:{ fontSize:11, color:"var(--muted)", marginBottom:6 } }, a.desc),
+                React.createElement("p", { style:{ fontSize:10, color:"var(--dim)" } }, "Schedule: " + a.schedule),
+                lastRun?.last_run && React.createElement("p", { style:{ fontSize:10, color: lastRun.last_success ? "#10b981" : "#ef4444", marginTop:4 } },
+                  "Last: " + lastRun.last_action + " (" + (lastRun.last_tokens||0) + " tokens)")
+              ),
+              React.createElement("button", {
+                onClick: () => runAgent(a.name, a.trigger), disabled: isRunning,
+                style:{ padding:"6px 16px", borderRadius:8, border:"none", fontSize:12, fontWeight:700, cursor: isRunning?"not-allowed":"pointer",
+                  background: isRunning ? "#1e3a5f" : "#f59e0b", color: isRunning ? "#60a5fa" : "#000", opacity: isRunning ? 0.7 : 1 }
+              }, isRunning ? "Running..." : "▶ Run")
+            )
+          );
+        })
+      ),
+
+      // Agent output
+      agentOutput && React.createElement(Card, { style:{ marginBottom:16 } },
+        React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 } },
+          React.createElement("p", { style:{ fontWeight:700, fontSize:13 } }, "Agent Output" +
+            (agentMeta ? " — " + agentMeta.turns + " turns, " + agentMeta.tokens + " tokens, " + (agentMeta.time/1000).toFixed(1) + "s" : "")),
+          React.createElement("button", { onClick:()=>{ setAgentOutput(null); setAgentMeta(null); },
+            style:{ padding:"3px 10px", borderRadius:6, border:"1px solid var(--border-hi)", background:"var(--bg-subtle)", color:"var(--muted)", fontSize:10, fontWeight:700, cursor:"pointer" } }, "✕ Close")
+        ),
+        agentMeta?.actions?.length > 0 && React.createElement("div", { style:{ marginBottom:10, padding:10, background:"var(--bg-subtle)", borderRadius:8, fontSize:11 } },
+          React.createElement("strong", null, "Tools called: "),
+          agentMeta.actions.map((ac,i) => React.createElement("span", { key:i, style:{ display:"inline-block", margin:"2px 4px", padding:"2px 8px", borderRadius:4, fontSize:10, fontWeight:600,
+            background: ac.success ? "#064e3b" : "#3b1010", color: ac.success ? "#10b981" : "#ef4444" } }, ac.tool))
+        ),
+        React.createElement("div", { style:{ background:"#0a0a0a", border:"1px solid var(--border)", borderRadius:8, padding:14, fontFamily:"Consolas, monospace", fontSize:12, whiteSpace:"pre-wrap", maxHeight:400, overflowY:"auto", lineHeight:1.7 } }, agentOutput)
+      )
+    ),
+
+    // === APPROVALS TAB ===
+    subTab === "approvals" && React.createElement("div", null,
+      approvals.length === 0
+        ? React.createElement(Card, null, React.createElement("p", { style:{ textAlign:"center", padding:30, color:"var(--muted)" } }, "No pending approvals — all clear"))
+        : approvals.map(a => React.createElement(Card, { key:a.id, style:{ marginBottom:10, borderColor: a.priority==="urgent" ? "#ef4444" : "var(--border)" } },
+            React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" } },
+              React.createElement("div", { style:{ flex:1 } },
+                React.createElement("div", { style:{ display:"flex", gap:8, alignItems:"center", marginBottom:6 } },
+                  React.createElement(Badge, { label:a.priority, color: a.priority==="urgent"?"#ef4444":a.priority==="high"?"#f59e0b":"#6b7280", small:true }),
+                  React.createElement(Badge, { label:a.agent, color:"#3b82f6", small:true }),
+                  React.createElement("span", { style:{ fontSize:10, color:"var(--dim)" } }, a.action_type)
+                ),
+                React.createElement("p", { style:{ fontWeight:700, fontSize:14, marginBottom:4 } }, a.title),
+                React.createElement("p", { style:{ fontSize:12, color:"var(--muted)" } }, a.summary),
+                a.full_content && React.createElement("details", { style:{ marginTop:8 } },
+                  React.createElement("summary", { style:{ fontSize:11, color:"var(--dim)", cursor:"pointer" } }, "View full content"),
+                  React.createElement("pre", { style:{ fontSize:11, marginTop:6, padding:10, background:"var(--bg-subtle)", borderRadius:6, whiteSpace:"pre-wrap", maxHeight:200, overflowY:"auto" } }, a.full_content)
+                )
+              ),
+              React.createElement("div", { style:{ display:"flex", gap:6, marginLeft:12, flexShrink:0 } },
+                React.createElement("button", { onClick:()=>handleApproval(a.id,"approved"), style:{ padding:"6px 14px", borderRadius:6, border:"none", fontSize:12, fontWeight:700, cursor:"pointer", background:"#10b981", color:"#fff" } }, "✓ Approve"),
+                React.createElement("button", { onClick:()=>handleApproval(a.id,"rejected"), style:{ padding:"6px 14px", borderRadius:6, border:"none", fontSize:12, fontWeight:700, cursor:"pointer", background:"#ef4444", color:"#fff" } }, "✕ Reject")
+              )
+            )
+          ))
+    ),
+
+    // === COMMS TAB ===
+    subTab === "comms" && React.createElement("div", null,
+      comms.length === 0
+        ? React.createElement(Card, null, React.createElement("p", { style:{ textAlign:"center", padding:30, color:"var(--muted)" } }, "No communications yet — run an agent to see messages"))
+        : React.createElement(Card, null,
+            comms.map((c,i) => React.createElement("div", { key:i, style:{ padding:"10px 0", borderBottom: i < comms.length-1 ? "1px solid var(--border)" : "none" } },
+              React.createElement("div", { style:{ display:"flex", gap:8, alignItems:"center", marginBottom:4 } },
+                React.createElement("span", null, c.channel==="sms"?"💬":c.channel==="email"?"📧":c.channel==="slack"?"🔔":"📝"),
+                React.createElement(Badge, { label:c.agent||"system", color:"#3b82f6", small:true }),
+                React.createElement(Badge, { label:c.direction, color: c.direction==="outbound"?"#f59e0b":"#10b981", small:true }),
+                React.createElement("span", { style:{ fontSize:11, color:"var(--muted)" } }, c.to_addr || ""),
+                React.createElement("span", { style:{ fontSize:10, color:"var(--dim)", marginLeft:"auto" } }, new Date(c.created_at).toLocaleString())
+              ),
+              React.createElement("p", { style:{ fontSize:12, color:"var(--text)", paddingLeft:28 } }, (c.body||"").substring(0, 250) + ((c.body||"").length > 250 ? "..." : ""))
+            ))
+          )
+    ),
+
+    // === COMPLIANCE TAB ===
+    subTab === "compliance" && React.createElement("div", null,
+      compAlerts && React.createElement(React.Fragment, null,
+        compAlerts.expired.count > 0 && React.createElement(Card, { style:{ marginBottom:12, borderColor:"#ef4444" } },
+          React.createElement("p", { style:{ fontWeight:700, fontSize:13, color:"#fca5a5", marginBottom:10 } }, "🚨 EXPIRED (" + compAlerts.expired.count + ")"),
+          compAlerts.expired.items.map((it,i) => React.createElement("div", { key:i, style:{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderTop: i?"1px solid var(--border)":"none" } },
+            React.createElement("div", null,
+              React.createElement("strong", null, it.first_name + " " + it.last_name),
+              React.createElement("span", { style:{ marginLeft:8 } }, React.createElement(Badge, { label:it.item_type, color:"#ef4444", small:true }))
+            ),
+            React.createElement("span", { style:{ fontSize:11, color:"var(--dim)" } }, "Expired: " + it.expiry_date)
+          ))
+        ),
+        compAlerts.expiring_30_days.count > 0 && React.createElement(Card, { style:{ marginBottom:12, borderColor:"#f59e0b" } },
+          React.createElement("p", { style:{ fontWeight:700, fontSize:13, color:"#fcd34d", marginBottom:10 } }, "⚠️ EXPIRING SOON (" + compAlerts.expiring_30_days.count + ")"),
+          compAlerts.expiring_30_days.items.map((it,i) => React.createElement("div", { key:i, style:{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderTop: i?"1px solid var(--border)":"none" } },
+            React.createElement("div", null,
+              React.createElement("strong", null, it.first_name + " " + it.last_name),
+              React.createElement("span", { style:{ marginLeft:8 } }, React.createElement(Badge, { label:it.item_type, color:"#f59e0b", small:true }))
+            ),
+            React.createElement("span", { style:{ fontSize:11, color:"var(--dim)" } }, "Expires: " + it.expiry_date)
+          ))
+        ),
+        compAlerts.expired.count === 0 && compAlerts.expiring_30_days.count === 0 && React.createElement(Card, null,
+          React.createElement("p", { style:{ textAlign:"center", padding:30, color:"#10b981" } }, "✅ All drivers fully compliant — no issues"))
+      )
+    ),
+
+    // === PIPELINE TAB ===
+    subTab === "pipeline" && React.createElement("div", null,
+      pipeline && React.createElement(Card, null,
+        React.createElement("p", { style:{ fontWeight:700, fontSize:13, marginBottom:12 } }, "Outreach Pipeline"),
+        React.createElement("p", { style:{ fontSize:12, color:"var(--muted)", marginBottom:16 } }, "Follow-ups due today: " + (pipeline.followups_due || 0)),
+        React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))", gap:10 } },
+          (pipeline.pipeline || []).map((p,i) => {
+            const colors = { identified:"#6b7280", contacted:"#3b82f6", responded:"#f59e0b", negotiating:"#8b5cf6", onboarded:"#10b981", lost:"#ef4444" };
+            return React.createElement("div", { key:i, style:{ textAlign:"center", padding:16, background:"var(--bg-subtle)", borderRadius:10, borderTop:"3px solid "+(colors[p.stage]||"#6b7280") } },
+              React.createElement("div", { style:{ fontSize:24, fontWeight:800, color: colors[p.stage]||"var(--text)" } }, p.count),
+              React.createElement("div", { style:{ fontSize:11, color:"var(--muted)", marginTop:4 } }, p.stage),
+              React.createElement("div", { style:{ fontSize:10, color:"var(--dim)" } }, p.type)
+            );
+          })
+        )
+      )
+    )
   );
 }
 
