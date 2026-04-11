@@ -497,19 +497,13 @@ function Dashboard({ session, isAdmin }) {
         }
         _setTasks(loadedTasks);
       }
-      // Merge seed tasks: prepend missing seeds and overwrite notes/fields on existing seeds
+      // Merge seed tasks: only add missing seeds, never overwrite existing tasks
       const loadedPT = ptRow?.value || [];
       const missingSeeds = SEED_PRIORITY_TASKS.filter(s => !loadedPT.some(t => t.id === s.id));
-      const updatedPT = loadedPT.map(t => {
-        const seed = SEED_PRIORITY_TASKS.find(s => s.id === t.id);
-        return seed ? { ...t, notes: seed.notes, text: seed.text, deadline: seed.deadline, priority: seed.priority } : t;
-      });
-      const mergedPT = [...missingSeeds, ...updatedPT];
-      const needsPersist = missingSeeds.length > 0 || loadedPT.some(t => {
-        const seed = SEED_PRIORITY_TASKS.find(s => s.id === t.id);
-        return seed && t.notes !== seed.notes;
-      });
-      if (needsPersist) sb.from("app_settings").upsert({ key:"priority_tasks", value: mergedPT }, { onConflict: "key" });
+      const mergedPT = [...missingSeeds, ...loadedPT];
+      if (missingSeeds.length > 0) {
+        sb.from("app_settings").upsert({ key:"priority_tasks", value: mergedPT }, { onConflict: "key" });
+      }
       _setPriorityTasks(mergedPT);
       setDbReady(true);
     })();
@@ -2099,6 +2093,7 @@ function FinanceComplianceTab({ loads, setLoads, drivers, ooFees, brokerProfit, 
 function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly, prominent }) {
   const [collapsed, setCollapsed] = useState({ urgent:false, asap:false, normal:false });
   const [showAdd, setShowAdd] = useState(null);
+  const [showDone, setShowDone] = useState(false);
   const [form, setForm] = useState({ text:"", dept:"", person:"", deadline:"", notes:"" });
 
   const ALL_TIERS = [
@@ -2228,7 +2223,7 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly, 
             {addBtn("urgent", "+ Add Urgent", { background:"#991b1b", border:"1px solid #EF4444", color:"#fca5a5" })}
           </div>
 
-          {[...urgentActive, ...urgentAll.filter(t=>t.done)].map(t => (
+          {[...urgentActive, ...(showDone ? urgentAll.filter(t=>t.done) : [])].map(t => (
             <div key={t.id} className="priority-item" style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", borderRadius:10, marginBottom:6,
               background: t.done?"rgba(0,0,0,0.3)":"rgba(239,68,68,0.13)",
               border:`1px solid ${t.done?"rgba(239,68,68,0.12)":"rgba(239,68,68,0.4)"}`,
@@ -2276,7 +2271,7 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly, 
             {addBtn("asap", "+ Add Task", { background:"#431407", border:"1px solid #F59E0B", color:"#fcd34d" })}
           </div>
 
-          {[...asapActive, ...asapAll.filter(t=>t.done)].map(t => (
+          {[...asapActive, ...(showDone ? asapAll.filter(t=>t.done) : [])].map(t => (
             <div key={t.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 14px", borderRadius:9, marginBottom:5,
               background: t.done?"rgba(0,0,0,0.25)":"rgba(245,158,11,0.09)",
               border:`1px solid ${t.done?"rgba(245,158,11,0.12)":"rgba(245,158,11,0.3)"}`,
@@ -2304,6 +2299,15 @@ function TaskPriorityPanel({ priorityTasks, setPriorityTasks, tasks, tiersOnly, 
             </div>
           ))}
         </div>
+
+        {(urgentAll.some(t=>t.done) || asapAll.some(t=>t.done)) && (
+          <div style={{ textAlign:"center", marginTop:8 }}>
+            <button onClick={()=>setShowDone(!showDone)}
+              style={{ fontSize:11, color:"var(--muted)", background:"none", border:"1px solid var(--border)", borderRadius:6, padding:"4px 12px", cursor:"pointer" }}>
+              {showDone ? "Hide completed" : `Show completed (${urgentAll.filter(t=>t.done).length + asapAll.filter(t=>t.done).length})`}
+            </button>
+          </div>
+        )}
 
         <AddModal />
       </div>
