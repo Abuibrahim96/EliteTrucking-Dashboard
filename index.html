@@ -497,14 +497,14 @@ function Dashboard({ session, isAdmin }) {
         }
         _setTasks(loadedTasks);
       }
-      // Merge seed tasks: only add missing seeds, never overwrite existing tasks
-      const loadedPT = ptRow?.value || [];
-      const missingSeeds = SEED_PRIORITY_TASKS.filter(s => !loadedPT.some(t => t.id === s.id));
-      const mergedPT = [...missingSeeds, ...loadedPT];
-      if (missingSeeds.length > 0) {
-        sb.from("app_settings").upsert({ key:"priority_tasks", value: mergedPT }, { onConflict: "key" });
+      // Seed ONLY when the priority_tasks row has never been created.
+      // Once the row exists (even as []), respect user's deletions/completions.
+      if (!ptRow) {
+        sb.from("app_settings").upsert({ key:"priority_tasks", value: SEED_PRIORITY_TASKS }, { onConflict: "key" });
+        _setPriorityTasks(SEED_PRIORITY_TASKS);
+      } else {
+        _setPriorityTasks(ptRow.value || []);
       }
-      _setPriorityTasks(mergedPT);
       setDbReady(true);
     })();
   }, []);
